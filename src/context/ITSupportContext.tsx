@@ -36,7 +36,7 @@ export const ITSupportProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const newTickets = [newTicket, ...tickets];
     setTickets(newTickets);
-    if (forceSaveTickets) forceSaveTickets(newTickets);
+    // // if (forceSave forceSaveTickets(newTickets);
 
     // Notify IT Admins (Mock IDs for now, in real app we'd filter users)
     // ben@zankli.com (24), emekao@zankli.com (25), mathew@zankli.com (26)
@@ -112,7 +112,7 @@ export const ITSupportProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return ticket;
     });
     setTickets(newTickets);
-    if (forceSaveTickets) forceSaveTickets(newTickets);
+    // if (forceSave forceSaveTickets(newTickets);
   };
 
   const updateTicketStatus = (ticketId: string, status: Ticket['status'], resolution?: string) => {
@@ -139,7 +139,7 @@ export const ITSupportProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return ticket;
     });
     setTickets(newTickets);
-    if (forceSaveTickets) forceSaveTickets(newTickets);
+    // if (forceSave forceSaveTickets(newTickets);
   };
 
   const assignTicket = (ticketId: string, adminId: string) => {
@@ -165,7 +165,7 @@ export const ITSupportProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return ticket;
     });
     setTickets(newTickets);
-    if (forceSaveTickets) forceSaveTickets(newTickets);
+    // if (forceSave forceSaveTickets(newTickets);
   };
 
   return (

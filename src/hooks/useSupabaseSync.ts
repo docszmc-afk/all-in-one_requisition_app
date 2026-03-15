@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
 export function useSupabaseSync<T>(key: string, initialValue: T) {
@@ -8,99 +8,105 @@ export function useSupabaseSync<T>(key: string, initialValue: T) {
 
   const isArray = Array.isArray(initialValue);
 
-  // Load from Supabase on mount and subscribe to changes
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        if (isArray) {
-          const { data, error } = await supabase
-            .from('app_state')
-            .select('data')
-            .like('key', `${key}:%`);
+  const loadData = useCallback(async () => {
+    setIsLoaded(false);
+    try {
+      if (isArray) {
+        const { data, error } = await supabase
+          .from('app_state')
+          .select('data')
+          .like('key', `${key}:%`);
 
-          if (error) {
-            if (error.code === '42P01') {
-              console.error(`CRITICAL ERROR: Table 'app_state' does not exist in Supabase. Please create it to enable saving.`);
-            } else {
-              console.error(`Error loading ${key} from Supabase:`, error);
-            }
-          } else if (data && data.length > 0) {
-            const loadedArray = data.map(row => row.data);
-            // Sort by createdAt if available
-            loadedArray.sort((a, b) => {
-              if (a.createdAt && b.createdAt) {
-                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-              }
-              return 0;
-            });
-            lastSavedData.current = JSON.stringify(loadedArray);
-            setState(loadedArray as unknown as T);
+        if (error) {
+          if (error.code === '42P01') {
+            console.error(`CRITICAL ERROR: Table 'app_state' does not exist in Supabase. Please create it to enable saving.`);
           } else {
-            // Check if it's stored in the old format (single key)
-            const { data: oldData, error: oldError } = await supabase
-              .from('app_state')
-              .select('data')
-              .eq('key', key)
-              .single();
-            
-            if (oldData && !oldError) {
-              // Migrate to new format
-              const oldArray = oldData.data as any[];
-              
-              // We must save these to the new format immediately
-              const BATCH_SIZE = 10;
-              for (let i = 0; i < oldArray.length; i += BATCH_SIZE) {
-                const batch = oldArray.slice(i, i + BATCH_SIZE);
-                await supabase
-                  .from('app_state')
-                  .upsert(
-                    batch.map(item => ({
-                      key: `${key}:${item.id}`,
-                      data: item,
-                      updated_at: new Date().toISOString()
-                    }))
-                  );
-              }
-              // Optionally delete the old single row to clean up
-              await supabase.from('app_state').delete().eq('key', key);
-
-              lastSavedData.current = JSON.stringify(oldArray);
-              setState(oldArray as unknown as T);
-            } else {
-              console.log(`No remote data found for ${key}. Resetting to initial state.`);
-              lastSavedData.current = JSON.stringify(initialValue);
-              setState(initialValue);
-            }
+            console.error(`Error loading ${key} from Supabase:`, error);
           }
+        } else if (data && data.length > 0) {
+          const loadedArray = data.map(row => row.data);
+          // Sort by createdAt if available
+          loadedArray.sort((a, b) => {
+            if (a.createdAt && b.createdAt) {
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            }
+            return 0;
+          });
+          lastSavedData.current = JSON.stringify(loadedArray);
+          setState(loadedArray as unknown as T);
         } else {
-          // Object logic
-          const { data, error } = await supabase
+          // Check if it's stored in the old format (single key)
+          const { data: oldData, error: oldError } = await supabase
             .from('app_state')
             .select('data')
             .eq('key', key)
             .single();
+          
+          if (oldData && !oldError) {
+            // Migrate to new format
+            const oldArray = oldData.data as any[];
+            
+            // We must save these to the new format immediately
+            const BATCH_SIZE = 10;
+            for (let i = 0; i < oldArray.length; i += BATCH_SIZE) {
+              const batch = oldArray.slice(i, i + BATCH_SIZE);
+              await supabase
+                .from('app_state')
+                .upsert(
+                  batch.map(item => ({
+                    key: `${key}:${item.id}`,
+                    data: item,
+                    updated_at: new Date().toISOString()
+                  }))
+                );
+            }
+            // Optionally delete the old single row to clean up
+            await supabase.from('app_state').delete().eq('key', key);
 
-          if (data && !error) {
-            lastSavedData.current = JSON.stringify(data.data);
-            setState(data.data as T);
-          } else if (error && error.code === 'PGRST116') {
+            lastSavedData.current = JSON.stringify(oldArray);
+            setState(oldArray as unknown as T);
+          } else {
             console.log(`No remote data found for ${key}. Resetting to initial state.`);
             lastSavedData.current = JSON.stringify(initialValue);
             setState(initialValue);
-          } else if (error && error.code === '42P01') {
-             console.error(`CRITICAL ERROR: Table 'app_state' does not exist in Supabase. Please create it to enable saving.`);
-          } else if (error) {
-             console.error(`Error loading ${key} from Supabase:`, error);
           }
         }
-      } catch (error) {
-        console.error(`Failed to load ${key} from Supabase:`, error);
-      } finally {
-        setIsLoaded(true);
-      }
-    };
+      } else {
+        // Object logic
+        const { data, error } = await supabase
+          .from('app_state')
+          .select('data')
+          .eq('key', key)
+          .single();
 
+        if (data && !error) {
+          lastSavedData.current = JSON.stringify(data.data);
+          setState(data.data as T);
+        } else if (error && error.code === 'PGRST116') {
+          console.log(`No remote data found for ${key}. Resetting to initial state.`);
+          lastSavedData.current = JSON.stringify(initialValue);
+          setState(initialValue);
+        } else if (error && error.code === '42P01') {
+           console.error(`CRITICAL ERROR: Table 'app_state' does not exist in Supabase. Please create it to enable saving.`);
+        } else if (error) {
+           console.error(`Error loading ${key} from Supabase:`, error);
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to load ${key} from Supabase:`, error);
+    } finally {
+      setIsLoaded(true);
+    }
+  }, [key, isArray]);
+
+  // Load from Supabase on mount and subscribe to changes
+  useEffect(() => {
     loadData();
+
+    const handleRefresh = () => {
+      loadData();
+    };
+    window.addEventListener('refresh_data', handleRefresh);
 
     // Subscribe to real-time changes
     const channel = supabase
@@ -118,7 +124,7 @@ export function useSupabaseSync<T>(key: string, initialValue: T) {
               // Handle array item change
               setState(prev => {
                 const prevArray = prev as any[];
-                const newData = payload.new.data;
+                const newData = (payload.new as any).data;
                 const existingIndex = prevArray.findIndex(item => item.id === newData.id);
                 let newArray;
                 if (existingIndex >= 0) {
@@ -165,9 +171,10 @@ export function useSupabaseSync<T>(key: string, initialValue: T) {
       .subscribe();
 
     return () => {
+      window.removeEventListener('refresh_data', handleRefresh);
       supabase.removeChannel(channel);
     };
-  }, [key]);
+  }, [key, loadData]);
 
   // Save to Supabase when state changes locally
   useEffect(() => {
@@ -300,5 +307,5 @@ export function useSupabaseSync<T>(key: string, initialValue: T) {
     }
   };
 
-  return [state, setState, isLoaded, forceSave] as const;
+  return [state, setState, isLoaded, forceSave, loadData] as const;
 }

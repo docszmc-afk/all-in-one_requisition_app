@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useProcurement } from '../context/ProcurementContext';
 import { useAuth, MOCK_USERS } from '../context/AuthContext';
 import { format } from 'date-fns';
-import { CheckCircle, FileText, Search, CreditCard, Mail, Paperclip, BarChart3, TrendingUp, PieChart as PieChartIcon, Download } from 'lucide-react';
+import { CheckCircle, FileText, Search, CreditCard, Mail, Paperclip, BarChart3, TrendingUp, PieChart as PieChartIcon, Download, RefreshCw } from 'lucide-react';
 import { Attachment } from '../types';
 import { useNotifications } from '../context/NotificationContext';
 import { useEmail } from '../context/EmailContext';
@@ -150,6 +150,13 @@ export default function AccountingSuite() {
           <h1 className="text-2xl font-bold text-stone-900">Accounting Suite</h1>
           <p className="text-stone-500 mt-1">Manage payments, invoices, and expenditure analytics.</p>
         </div>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('refresh_data'))}
+          className="inline-flex items-center justify-center px-4 py-2 border border-stone-200 text-sm font-medium rounded-xl shadow-sm text-stone-700 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh
+        </button>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden mb-8">

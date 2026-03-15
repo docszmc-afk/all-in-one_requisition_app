@@ -125,7 +125,7 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const saveDraft = (requestData: Omit<ProcurementRequest, 'id' | 'createdAt' | 'status'>, existingId?: string) => {
     if (existingId) {
-      const newRequests = requests.map(req => req.id === existingId ? { ...req, ...requestData, status: 'Draft', isDraft: true } : req);
+      const newRequests = requests.map(req => req.id === existingId ? { ...req, ...requestData, status: 'Draft' as const, isDraft: true } : req);
       setRequests(newRequests);
       if (forceSaveRequests) forceSaveRequests(newRequests);
     } else {

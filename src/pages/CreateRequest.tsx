@@ -44,6 +44,8 @@ export default function CreateRequest() {
   const [newWorkflowName, setNewWorkflowName] = useState<string>('');
   const [isSavingWorkflow, setIsSavingWorkflow] = useState<boolean>(false);
 
+  const mockUserId = user ? MOCK_USERS.find(m => m.email === user.email)?.id : undefined;
+
   const allowedRequestTypes = useMemo((): RequestType[] => {
     if (user?.email === 'labzankli@gmail.com') {
       return ['General', 'Lab Purchase Order', 'Histology Payment', 'Equipment Request'];
@@ -499,7 +501,7 @@ export default function CreateRequest() {
       saveWorkflow({
         name: newWorkflowName || `Custom Workflow - ${new Date().toLocaleDateString()}`,
         approverIds: workflowApprovers,
-        creatorId: user?.id || ''
+        creatorId: user?.id || mockUserId || ''
       });
     }
 
@@ -1261,7 +1263,7 @@ export default function CreateRequest() {
                 className="block w-full rounded-xl border-stone-200 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm py-2 px-3 border bg-stone-50"
               >
                 <option value="">-- Custom Workflow --</option>
-                {savedWorkflows.filter(wf => wf.creatorId === user?.id).map(wf => (
+                {savedWorkflows.filter(wf => wf.creatorId === user?.id || wf.creatorId === mockUserId).map(wf => (
                   <option key={wf.id} value={wf.id}>{wf.name}</option>
                 ))}
               </select>

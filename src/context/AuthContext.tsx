@@ -67,7 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(loggedInUser);
           localStorage.setItem('zankli_user', JSON.stringify(loggedInUser));
         }
-      } else {
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
         localStorage.removeItem('zankli_user');
       }

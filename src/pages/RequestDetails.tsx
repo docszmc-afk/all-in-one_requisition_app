@@ -118,12 +118,14 @@ export default function RequestDetails() {
     );
   }
 
+  const mockUserId = user ? MOCK_USERS.find(m => m.email === user.email)?.id : undefined;
+
   const isDynamicWorkflow = request.workflow && request.workflow.length > 0;
   
   const canApproveDynamic = isDynamicWorkflow && 
     request.status === 'Pending Approval' && 
     request.currentApproverIndex !== undefined && 
-    request.workflow![request.currentApproverIndex] === user?.id;
+    (request.workflow![request.currentApproverIndex] === user?.id || request.workflow![request.currentApproverIndex] === mockUserId);
 
   const canApproveAudit = !isDynamicWorkflow && (user?.role === 'Approver' || user?.role === 'Both') && user.department === 'Audit' && request.status === 'Pending Audit';
   const canApproveAccounts = !isDynamicWorkflow && (user?.role === 'Approver' || user?.role === 'Both') && user.department === 'Accounts' && request.status === 'Pending Accounts';
@@ -316,7 +318,7 @@ export default function RequestDetails() {
          }
       }
 
-      processApproval(request.id, user!.id, status, approverSignature, notes, editableItems);
+      processApproval(request.id, mockUserId || user!.id, status, approverSignature, notes, editableItems);
     } else {
       if (canApproveAudit) {
         updateRequestStatus(

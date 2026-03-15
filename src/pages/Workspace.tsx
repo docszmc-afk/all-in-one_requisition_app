@@ -6,7 +6,7 @@ import { Task, TaskStatus, TaskPriority } from '../types';
 import { format } from 'date-fns';
 import { 
   Send, Image as ImageIcon, Plus, Clock, AlertCircle, 
-  CheckCircle2, Circle, MoreVertical, X, Calendar
+  CheckCircle2, Circle, MoreVertical, X, Calendar, RefreshCw
 } from 'lucide-react';
 
 const STATUSES: TaskStatus[] = ['Todo', 'In Progress', 'Review', 'Done'];
@@ -91,13 +91,22 @@ export default function Workspace() {
       <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
         <div className="p-4 border-b border-stone-200 bg-stone-50 flex justify-between items-center">
           <h2 className="text-lg font-bold text-stone-900">Task Allocator</h2>
-          <button
-            onClick={() => setIsNewTaskModalOpen(true)}
-            className="inline-flex items-center px-3 py-1.5 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            New Task
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('refresh_data'))}
+              className="inline-flex items-center px-3 py-1.5 bg-white border border-stone-200 text-stone-700 text-sm font-medium rounded-lg hover:bg-stone-50 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Refresh
+            </button>
+            <button
+              onClick={() => setIsNewTaskModalOpen(true)}
+              className="inline-flex items-center px-3 py-1.5 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              New Task
+            </button>
+          </div>
         </div>
         
         <div className="flex-1 overflow-x-auto p-4">

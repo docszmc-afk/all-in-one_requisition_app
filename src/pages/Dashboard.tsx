@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, MOCK_USERS } from '../context/AuthContext';
 import { useProcurement } from '../context/ProcurementContext';
 import { motion } from 'framer-motion';
 import { 
@@ -12,7 +12,8 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -76,10 +77,12 @@ export default function Dashboard() {
     return data;
   }, [requests]);
 
+  const mockUserId = user ? MOCK_USERS.find(m => m.email === user.email)?.id : undefined;
+
   const userRequests = user?.role === 'Creator' 
     ? requests.filter(r => r.department === user.department)
     : user?.role === 'Both'
-    ? requests.filter(r => r.department === user.department || (r.workflow && r.workflow.includes(user.id)))
+    ? requests.filter(r => r.department === user.department || (r.workflow && (r.workflow.includes(user.id) || (mockUserId && r.workflow.includes(mockUserId)))))
     : requests;
 
   // Filter and Sort Logic
@@ -96,7 +99,7 @@ export default function Dashboard() {
     if (isDynamicWorkflow) {
       needsAction = req.status === 'Pending Approval' && 
                     req.currentApproverIndex !== undefined && 
-                    req.workflow![req.currentApproverIndex] === user?.id;
+                    (req.workflow![req.currentApproverIndex] === user?.id || req.workflow![req.currentApproverIndex] === mockUserId);
     } else {
       if (user?.department === 'Audit' && req.status === 'Pending Audit') needsAction = true;
       if (user?.department === 'Accounts' && req.status === 'Pending Accounts') needsAction = true;
@@ -155,15 +158,24 @@ export default function Dashboard() {
             Here's what's happening in {user?.department || 'your'} procurement today.
           </p>
         </div>
-        {(user?.role === 'Creator' || user?.role === 'Both') && (
-          <Link
-            to="/requests/new"
-            className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('refresh_data'))}
+            className="inline-flex items-center justify-center px-4 py-2 border border-stone-200 text-sm font-medium rounded-xl shadow-sm text-stone-700 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
           >
-            <FileText className="w-4 h-4 mr-2" />
-            New Request
-          </Link>
-        )}
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </button>
+          {(user?.role === 'Creator' || user?.role === 'Both') && (
+            <Link
+              to="/requests/new"
+              className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              New Request
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Search Bar */}

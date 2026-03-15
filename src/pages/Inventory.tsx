@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useInventory } from '../context/InventoryContext';
 import { motion } from 'framer-motion';
-import { Plus, Package, DollarSign, Layers } from 'lucide-react';
+import { Plus, Package, DollarSign, Layers, RefreshCw } from 'lucide-react';
 
 export default function Inventory() {
   const { inventory, addInventoryItem } = useInventory();
@@ -26,13 +26,22 @@ export default function Inventory() {
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Store Management</h1>
           <p className="text-sm text-stone-500 mt-1">Manage facility inventory and stock levels.</p>
         </div>
-        <button
-          onClick={() => setIsAdding(!isAdding)}
-          className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Item
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('refresh_data'))}
+            className="inline-flex items-center justify-center px-4 py-2 border border-stone-200 text-sm font-medium rounded-xl shadow-sm text-stone-700 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </button>
+          <button
+            onClick={() => setIsAdding(!isAdding)}
+            className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Item
+          </button>
+        </div>
       </div>
 
       {isAdding && (

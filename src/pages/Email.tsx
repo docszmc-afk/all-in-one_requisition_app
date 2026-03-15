@@ -83,14 +83,16 @@ export default function Email() {
     }
   }, [location.state]);
 
+  const mockUserId = user ? MOCK_USERS.find(m => m.email === user.email)?.id : undefined;
+
   const filteredEmails = useMemo(() => {
     if (!user) return [];
     
     let folderEmails = emails.filter(email => {
-      const isSender = email.senderId === user.id;
-      const isRecipient = email.toIds.includes(user.id) || email.ccIds.includes(user.id) || email.bccIds.includes(user.id);
-      const isDeleted = email.deletedBy.includes(user.id);
-      const isArchived = email.archivedBy.includes(user.id);
+      const isSender = email.senderId === user.id || (mockUserId && email.senderId === mockUserId);
+      const isRecipient = email.toIds.includes(user.id) || (mockUserId && email.toIds.includes(mockUserId)) || email.ccIds.includes(user.id) || (mockUserId && email.ccIds.includes(mockUserId)) || email.bccIds.includes(user.id) || (mockUserId && email.bccIds.includes(mockUserId));
+      const isDeleted = email.deletedBy.includes(user.id) || (mockUserId && email.deletedBy.includes(mockUserId));
+      const isArchived = email.archivedBy.includes(user.id) || (mockUserId && email.archivedBy.includes(mockUserId));
 
       if (currentFolder === 'trash') return isDeleted;
       if (currentFolder === 'archive') return isArchived && !isDeleted;
@@ -110,11 +112,11 @@ export default function Email() {
     }
 
     return folderEmails.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [emails, user, currentFolder, searchQuery]);
+  }, [emails, user, mockUserId, currentFolder, searchQuery]);
 
   const handleSelectEmail = (email: EmailMessage) => {
     setSelectedEmail(email);
-    if (user && !email.readBy.includes(user.id)) {
+    if (user && !email.readBy.includes(user.id) && (!mockUserId || !email.readBy.includes(mockUserId))) {
       markAsRead(email.id);
     }
   };
@@ -140,7 +142,7 @@ export default function Email() {
     }
 
     sendEmail({
-      senderId: user.id,
+      senderId: mockUserId || user.id,
       toIds,
       ccIds,
       bccIds,
@@ -195,10 +197,10 @@ export default function Email() {
   const getUnreadCount = (folder: Folder) => {
     if (!user) return 0;
     return emails.filter(e => {
-      const isRecipient = e.toIds.includes(user.id) || e.ccIds.includes(user.id) || e.bccIds.includes(user.id);
-      const isDeleted = e.deletedBy.includes(user.id);
-      const isArchived = e.archivedBy.includes(user.id);
-      const isUnread = !e.readBy.includes(user.id);
+      const isRecipient = e.toIds.includes(user.id) || (mockUserId && e.toIds.includes(mockUserId)) || e.ccIds.includes(user.id) || (mockUserId && e.ccIds.includes(mockUserId)) || e.bccIds.includes(user.id) || (mockUserId && e.bccIds.includes(mockUserId));
+      const isDeleted = e.deletedBy.includes(user.id) || (mockUserId && e.deletedBy.includes(mockUserId));
+      const isArchived = e.archivedBy.includes(user.id) || (mockUserId && e.archivedBy.includes(mockUserId));
+      const isUnread = !e.readBy.includes(user.id) && (!mockUserId || !e.readBy.includes(mockUserId));
       
       if (folder === 'inbox') return isRecipient && !isDeleted && !isArchived && isUnread;
       return false;
@@ -206,7 +208,7 @@ export default function Email() {
   };
 
   const renderUserSelect = (label: string, value: string[], onChange: (val: string[]) => void) => {
-    const availableUsers = MOCK_USERS.filter(u => u.id !== user?.id && !value.includes(u.id));
+    const availableUsers = MOCK_USERS.filter(u => u.id !== user?.id && u.id !== mockUserId && !value.includes(u.id));
     
     return (
       <div className="space-y-2">
@@ -487,7 +489,7 @@ export default function Email() {
               ) : (
                 <ul className="divide-y divide-stone-200">
                   {filteredEmails.map((email) => {
-                    const isUnread = user && !email.readBy.includes(user.id) && currentFolder === 'inbox';
+                    const isUnread = user && !email.readBy.includes(user.id) && (!mockUserId || !email.readBy.includes(mockUserId)) && currentFolder === 'inbox';
                     return (
                       <li 
                         key={email.id}

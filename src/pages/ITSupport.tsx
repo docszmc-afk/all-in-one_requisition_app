@@ -4,7 +4,7 @@ import { useITSupport } from '../context/ITSupportContext';
 import { useProcurement } from '../context/ProcurementContext';
 import { Ticket, UrgencyLevel, TicketMessage } from '../types';
 import { motion } from 'framer-motion';
-import { Plus, MessageSquare, CheckCircle, XCircle, Clock, Monitor, Send, Search, Filter, AlertTriangle } from 'lucide-react';
+import { Plus, MessageSquare, CheckCircle, XCircle, Clock, Monitor, Send, Search, Filter, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import ImageGeneration from '../components/ImageGeneration';
@@ -82,6 +82,13 @@ export default function ITSupport() {
           </p>
         </div>
         <div className="flex space-x-2">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('refresh_data'))}
+            className="inline-flex items-center px-4 py-2 border border-stone-200 text-sm font-medium rounded-xl shadow-sm text-stone-700 bg-white hover:bg-stone-50"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </button>
           {isITAdmin && (
             <div className="flex bg-stone-100 p-1 rounded-lg">
               <button

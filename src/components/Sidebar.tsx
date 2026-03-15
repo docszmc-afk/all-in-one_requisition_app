@@ -19,11 +19,17 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useEmail } from '../context/EmailContext';
+import { useITSupport } from '../context/ITSupportContext';
+import { useWorkspace } from '../context/WorkspaceContext';
+import { useFacilityRequests } from '../context/FacilityRequestContext';
 import StorageStatus from './StorageStatus';
 
 export default function Sidebar({ onClose }: { onClose: () => void }) {
   const { user, logout } = useAuth();
   const { unreadCount } = useEmail();
+  const { tickets } = useITSupport();
+  const { tasks } = useWorkspace();
+  const { facilityRequests } = useFacilityRequests();
   const { requestPermission } = useNotifications();
   const navigate = useNavigate();
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
@@ -54,6 +60,22 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
     navigate('/login');
   };
 
+  const isITAdmin = user?.department === 'IT Support';
+  const isFacilityAdmin = user?.department === 'Facility';
+  const isWorkspaceUser = user?.department === 'Facility' || user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com';
+
+  const itSupportBadge = isITAdmin 
+    ? tickets.filter(t => t.status === 'Open').length 
+    : tickets.filter(t => t.createdBy === user?.email && (t.status === 'Resolved' || t.status === 'Unfixable')).length;
+
+  const facilityWorkspaceBadge = isWorkspaceUser
+    ? tasks.filter(t => t.status !== 'Done' && t.assigneeIds.includes(user?.id || '')).length
+    : 0;
+
+  const facilityRequestsBadge = isFacilityAdmin
+    ? facilityRequests.filter(r => r.status === 'Pending').length
+    : 0;
+
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     ...(user?.role === 'Creator' || user?.role === 'Both' ? [
@@ -61,7 +83,7 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
     ] : []),
     { to: '/requests', icon: List, label: 'All Requests' },
     ...(user?.role === 'Approver' || user?.role === 'Both' || user?.department === 'Facility' ? [
-      { to: '/facility-requests', icon: FilePlus, label: 'Facility Requests' }
+      { to: '/facility-requests', icon: FilePlus, label: 'Facility Requests', badge: facilityRequestsBadge > 0 ? facilityRequestsBadge : undefined }
     ] : []),
     ...(user?.department === 'Facility' || user?.department === 'Laboratory' || user?.department === 'Pharmacy' ? [
       { to: '/vendors', icon: Users, label: 'Vendors' }
@@ -69,13 +91,13 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
     ...(user?.department === 'Facility' ? [
       { to: '/inventory', icon: Package, label: 'Store Management' }
     ] : []),
-    ...(user?.department === 'Facility' || user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com' ? [
-      { to: '/workspace', icon: Briefcase, label: 'Facility Workspace' }
+    ...(isWorkspaceUser ? [
+      { to: '/workspace', icon: Briefcase, label: 'Facility Workspace', badge: facilityWorkspaceBadge > 0 ? facilityWorkspaceBadge : undefined }
     ] : []),
     ...(user?.department === 'Accounts' ? [
       { to: '/accounting', icon: Briefcase, label: 'Accounting Suite' }
     ] : []),
-    { to: '/it-support', icon: Settings, label: 'IT Support' },
+    { to: '/it-support', icon: Settings, label: 'IT Support', badge: itSupportBadge > 0 ? itSupportBadge : undefined },
     { to: '/email', icon: Mail, label: 'Internal Mail', badge: unreadCount > 0 ? unreadCount : undefined },
   ];
 

@@ -18,8 +18,8 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   
-  const [messages, setMessages, , forceSaveMessages] = useSupabaseSync<ChatMessage[]>('zmc_chat', []);
-  const [tasks, setTasks, , forceSaveTasks] = useSupabaseSync<Task[]>('zmc_tasks', []);
+  const [messages, setMessages] = useSupabaseSync<ChatMessage[]>('zmc_chat', []);
+  const [tasks, setTasks] = useSupabaseSync<Task[]>('zmc_tasks', []);
 
   const sendMessage = (text: string, imageUrl?: string) => {
     if (!user) return;
@@ -30,11 +30,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       imageUrl,
       createdAt: new Date().toISOString(),
     };
-    setMessages(prev => {
-      const newMsgs = [...prev, newMessage];
-      if (forceSaveMessages) forceSaveMessages(newMsgs);
-      return newMsgs;
-    });
+    setMessages(prev => [...prev, newMessage]);
   };
 
   const addTask = (taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -44,35 +40,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setTasks(prev => {
-      const newTasks = [newTask, ...prev];
-      if (forceSaveTasks) forceSaveTasks(newTasks);
-      return newTasks;
-    });
+    setTasks(prev => [newTask, ...prev]);
   };
 
   const updateTask = (id: string, updates: Partial<Task>) => {
-    setTasks(prev => {
-      const newTasks = prev.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t);
-      if (forceSaveTasks) forceSaveTasks(newTasks);
-      return newTasks;
-    });
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t));
   };
 
   const deleteTask = (id: string) => {
-    setTasks(prev => {
-      const newTasks = prev.filter(t => t.id !== id);
-      if (forceSaveTasks) forceSaveTasks(newTasks);
-      return newTasks;
-    });
+    setTasks(prev => prev.filter(t => t.id !== id));
   };
 
   const moveTask = (id: string, newStatus: TaskStatus) => {
-    setTasks(prev => {
-      const newTasks = prev.map(t => t.id === id ? { ...t, status: newStatus, updatedAt: new Date().toISOString() } : t);
-      if (forceSaveTasks) forceSaveTasks(newTasks);
-      return newTasks;
-    });
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status: newStatus, updatedAt: new Date().toISOString() } : t));
   };
 
   return (

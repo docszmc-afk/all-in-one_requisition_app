@@ -67,7 +67,7 @@ export const FacilityRequestProvider: React.FC<{ children: React.ReactNode }> = 
 
     if (hasUpdates) {
       setFacilityRequests(updatedRequests);
-      if (forceSaveFacilityRequests) forceSaveFacilityRequests(updatedRequests);
+      // // if (forceSave forceSaveFacilityRequests(updatedRequests);
     }
   }, [facilityRequests, user, addNotification, setFacilityRequests, forceSaveFacilityRequests]);
 
@@ -80,7 +80,7 @@ export const FacilityRequestProvider: React.FC<{ children: React.ReactNode }> = 
     };
     const newRequests = [newRequest, ...facilityRequests];
     setFacilityRequests(newRequests);
-    if (forceSaveFacilityRequests) forceSaveFacilityRequests(newRequests);
+    // if (forceSave forceSaveFacilityRequests(newRequests);
   };
 
   const updateFacilityRequestStatus = (id: string, status: 'Pending' | 'Completed') => {
@@ -88,7 +88,7 @@ export const FacilityRequestProvider: React.FC<{ children: React.ReactNode }> = 
       req.id === id ? { ...req, status } : req
     );
     setFacilityRequests(newRequests);
-    if (forceSaveFacilityRequests) forceSaveFacilityRequests(newRequests);
+    // if (forceSave forceSaveFacilityRequests(newRequests);
   };
 
   return (

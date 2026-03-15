@@ -4,7 +4,7 @@ import { useVendors } from '../context/VendorContext';
 import { useAuth } from '../context/AuthContext';
 import { useProcurement } from '../context/ProcurementContext';
 import { motion } from 'framer-motion';
-import { Plus, Building2, Phone, Mail, MapPin, Users, History, X } from 'lucide-react';
+import { Plus, Building2, Phone, Mail, MapPin, Users, History, X, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Vendors() {
@@ -56,13 +56,22 @@ export default function Vendors() {
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Vendors</h1>
           <p className="text-sm text-stone-500 mt-1">Manage your approved vendors and suppliers.</p>
         </div>
-        <button
-          onClick={() => setIsAdding(!isAdding)}
-          className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Vendor
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('refresh_data'))}
+            className="inline-flex items-center justify-center px-4 py-2 border border-stone-200 text-sm font-medium rounded-xl shadow-sm text-stone-700 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </button>
+          <button
+            onClick={() => setIsAdding(!isAdding)}
+            className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Vendor
+          </button>
+        </div>
       </div>
 
       {isAdding && (

@@ -19,7 +19,7 @@ export const VendorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     setVendors(prev => {
       const newVendors = [...prev, newVendor];
-      if (forceSaveVendors) forceSaveVendors(newVendors);
+      // // if (forceSave forceSaveVendors(newVendors);
       return newVendors;
     });
   };

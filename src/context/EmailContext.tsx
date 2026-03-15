@@ -1,6 +1,6 @@
 import React, { createContext, useContext } from 'react';
 import { EmailMessage, Attachment } from '../types';
-import { useAuth } from './AuthContext';
+import { MOCK_USERS, useAuth } from './AuthContext';
 import { useNotifications } from './NotificationContext';
 import { useSupabaseSync } from '../hooks/useSupabaseSync';
 
@@ -20,6 +20,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { addNotification } = useNotifications();
   const [emails, setEmails, , forceSaveEmails] = useSupabaseSync<EmailMessage[]>('zmc_emails', []);
+
+  const mockUserId = user ? MOCK_USERS.find(m => m.email === user.email)?.id : undefined;
 
   const sendEmail = (emailData: Omit<EmailMessage, 'id' | 'createdAt' | 'readBy' | 'archivedBy' | 'deletedBy'>) => {
     const newEmail: EmailMessage = {
@@ -53,8 +55,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     setEmails(prev => {
       const newEmails = prev.map(email => {
-        if (email.id === id && !email.readBy.includes(user.id)) {
-          return { ...email, readBy: [...email.readBy, user.id] };
+        if (email.id === id && !email.readBy.includes(user.id) && (!mockUserId || !email.readBy.includes(mockUserId))) {
+          return { ...email, readBy: [...email.readBy, user.id, ...(mockUserId ? [mockUserId] : [])] };
         }
         return email;
       });
@@ -67,8 +69,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     setEmails(prev => {
       const newEmails = prev.map(email => {
-        if (email.id === id && !email.archivedBy.includes(user.id)) {
-          return { ...email, archivedBy: [...email.archivedBy, user.id] };
+        if (email.id === id && !email.archivedBy.includes(user.id) && (!mockUserId || !email.archivedBy.includes(mockUserId))) {
+          return { ...email, archivedBy: [...email.archivedBy, user.id, ...(mockUserId ? [mockUserId] : [])] };
         }
         return email;
       });
@@ -81,8 +83,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     setEmails(prev => {
       const newEmails = prev.map(email => {
-        if (email.id === id && !email.deletedBy.includes(user.id)) {
-          return { ...email, deletedBy: [...email.deletedBy, user.id] };
+        if (email.id === id && !email.deletedBy.includes(user.id) && (!mockUserId || !email.deletedBy.includes(mockUserId))) {
+          return { ...email, deletedBy: [...email.deletedBy, user.id, ...(mockUserId ? [mockUserId] : [])] };
         }
         return email;
       });
@@ -98,8 +100,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         if (email.id === id) {
           return {
             ...email,
-            archivedBy: email.archivedBy.filter(uId => uId !== user.id),
-            deletedBy: email.deletedBy.filter(uId => uId !== user.id),
+            archivedBy: email.archivedBy.filter(uId => uId !== user.id && uId !== mockUserId),
+            deletedBy: email.deletedBy.filter(uId => uId !== user.id && uId !== mockUserId),
           };
         }
         return email;
@@ -110,10 +112,10 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   };
 
   const unreadCount = user ? emails.filter(e => 
-    (e.toIds.includes(user.id) || e.ccIds.includes(user.id) || e.bccIds.includes(user.id)) && 
-    !e.readBy.includes(user.id) && 
-    !e.deletedBy.includes(user.id) &&
-    !e.archivedBy.includes(user.id)
+    (e.toIds.includes(user.id) || (mockUserId && e.toIds.includes(mockUserId)) || e.ccIds.includes(user.id) || (mockUserId && e.ccIds.includes(mockUserId)) || e.bccIds.includes(user.id) || (mockUserId && e.bccIds.includes(mockUserId))) && 
+    !e.readBy.includes(user.id) && (!mockUserId || !e.readBy.includes(mockUserId)) && 
+    !e.deletedBy.includes(user.id) && (!mockUserId || !e.deletedBy.includes(mockUserId)) &&
+    !e.archivedBy.includes(user.id) && (!mockUserId || !e.archivedBy.includes(mockUserId))
   ).length : 0;
 
   return (

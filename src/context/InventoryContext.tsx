@@ -20,7 +20,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
     setInventory(prev => {
       const newInv = [...prev, newItem];
-      if (forceSaveInventory) forceSaveInventory(newInv);
+      // // if (forceSave forceSaveInventory(newInv);
       return newInv;
     });
   };
@@ -33,7 +33,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
         return item;
       });
-      if (forceSaveInventory) forceSaveInventory(newInv);
+      // if (forceSave forceSaveInventory(newInv);
       return newInv;
     });
   };
