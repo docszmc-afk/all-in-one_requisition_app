@@ -439,8 +439,23 @@ export default function RequestPDF({ request, vendors }: RequestPDFProps) {
             <View style={styles.row}>
               <View style={styles.col}><Text style={styles.label}>Start Date</Text><Text style={styles.value}>{request.leaveDetails.startDate}</Text></View>
               <View style={styles.col}><Text style={styles.label}>End Date</Text><Text style={styles.value}>{request.leaveDetails.endDate}</Text></View>
-              <View style={styles.col}><Text style={styles.label}>Leave Days</Text><Text style={styles.value}>{request.leaveDetails.daysRemaining}</Text></View>
+              <View style={styles.col}><Text style={styles.label}>Leave Days</Text><Text style={styles.value}>{request.leaveDetails.numberOfLeaveDays || request.leaveDetails.daysRemaining}</Text></View>
             </View>
+            <View style={styles.row}>
+              <View style={styles.col}><Text style={styles.label}>Remaining Leave Days</Text><Text style={styles.value}>{request.leaveDetails.daysRemaining}</Text></View>
+              <View style={styles.col}><Text style={styles.label}>Purpose</Text><Text style={[styles.value, { textTransform: 'capitalize' }]}>{request.leaveDetails.purpose}</Text></View>
+              <View style={styles.col}></View>
+            </View>
+            {request.leaveDetails.headOfDepartmentComment && (
+              <View style={[styles.row, { marginTop: 10 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>Head of Department Comment</Text>
+                  <Text style={[styles.value, { marginTop: 4, padding: 8, backgroundColor: '#f5f5f4', borderRadius: 4 }]}>
+                    {request.leaveDetails.headOfDepartmentComment}
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
         )}
 

@@ -37,6 +37,7 @@ export default function RequestDetails() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState(false);
   const [isSendingUrgent, setIsSendingUrgent] = useState(false);
+  const [hodComment, setHodComment] = useState('');
 
   const request = requests.find(r => r.id === id);
 
@@ -102,6 +103,9 @@ export default function RequestDetails() {
       }
       if (request.recommendedAmount !== undefined) {
         setRecommendedAmount(request.recommendedAmount);
+      }
+      if (request.leaveDetails?.headOfDepartmentComment) {
+        setHodComment(request.leaveDetails.headOfDepartmentComment);
       }
     }
   }, [request]);
@@ -279,14 +283,27 @@ export default function RequestDetails() {
       return;
     }
 
+    let updates: Partial<ProcurementRequest> = {};
     if (isStoreEditing || isAuditEditing) {
-      updateRequest(request.id, { 
+      updates = {
         items: editableItems,
         histologyDetailsList: editableHistologyDetails.length > 0 ? editableHistologyDetails : undefined,
         // If it was a single detail originally, we might want to keep it synced, but list is preferred now
         histologyDetails: editableHistologyDetails.length === 1 ? editableHistologyDetails[0] : undefined,
         ...(isAuditEditing && recommendedAmount !== '' ? { recommendedAmount: Number(recommendedAmount) } : {})
-      });
+      };
+    }
+    if (isLeave && request.leaveDetails?.headOfDepartmentId === (mockUserId || user?.id)) {
+      updates = {
+        ...updates,
+        leaveDetails: {
+          ...request.leaveDetails,
+          headOfDepartmentComment: hodComment
+        }
+      };
+    }
+    if (Object.keys(updates).length > 0) {
+      updateRequest(request.id, updates);
     }
 
     if (isDynamicWorkflow) {
@@ -978,7 +995,15 @@ export default function RequestDetails() {
                   <div><dt className="text-sm font-medium text-stone-500">Applicant Name</dt><dd className="mt-1 text-sm text-stone-900">{request.leaveDetails.applicantName}</dd></div>
                   <div><dt className="text-sm font-medium text-stone-500">Start Date</dt><dd className="mt-1 text-sm text-stone-900">{request.leaveDetails.startDate}</dd></div>
                   <div><dt className="text-sm font-medium text-stone-500">End Date</dt><dd className="mt-1 text-sm text-stone-900">{request.leaveDetails.endDate}</dd></div>
-                  <div><dt className="text-sm font-medium text-stone-500">Number of Leave Days</dt><dd className="mt-1 text-sm text-stone-900">{request.leaveDetails.daysRemaining}</dd></div>
+                  <div><dt className="text-sm font-medium text-stone-500">Number of Leave Days</dt><dd className="mt-1 text-sm text-stone-900">{request.leaveDetails.numberOfLeaveDays || request.leaveDetails.daysRemaining}</dd></div>
+                  <div><dt className="text-sm font-medium text-stone-500">Remaining Leave Days</dt><dd className="mt-1 text-sm text-stone-900">{request.leaveDetails.daysRemaining}</dd></div>
+                  <div><dt className="text-sm font-medium text-stone-500">Purpose</dt><dd className="mt-1 text-sm text-stone-900 capitalize">{request.leaveDetails.purpose}</dd></div>
+                  {request.leaveDetails.headOfDepartmentId && (
+                    <div><dt className="text-sm font-medium text-stone-500">Head of Department</dt><dd className="mt-1 text-sm text-stone-900">{MOCK_USERS.find(u => u.id === request.leaveDetails?.headOfDepartmentId)?.department || 'Approver'}</dd></div>
+                  )}
+                  {request.leaveDetails.headOfDepartmentComment && (
+                    <div className="sm:col-span-2 md:col-span-3"><dt className="text-sm font-medium text-stone-500">HOD Comment</dt><dd className="mt-1 text-sm text-stone-900 p-3 bg-stone-50 rounded-lg border border-stone-200">{request.leaveDetails.headOfDepartmentComment}</dd></div>
+                  )}
                 </dl>
               </div>
             </div>
@@ -1646,6 +1671,19 @@ export default function RequestDetails() {
                     placeholder="Add any comments or justification..."
                   />
                 </div>
+                {isLeave && request.leaveDetails?.headOfDepartmentId === (mockUserId || user?.id) && (
+                  <div>
+                    <label htmlFor="hodComment" className="block text-sm font-medium text-stone-700">Head of Department Comment</label>
+                    <textarea
+                      id="hodComment"
+                      rows={3}
+                      value={hodComment}
+                      onChange={(e) => setHodComment(e.target.value)}
+                      className="mt-1 block w-full rounded-xl border-stone-200 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm py-2 px-3 border"
+                      placeholder="Special comment from the Head of Department..."
+                    />
+                  </div>
+                )}
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => handleAction('Approve')}

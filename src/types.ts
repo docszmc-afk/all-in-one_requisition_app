@@ -156,6 +156,10 @@ export interface LeaveDetails {
   startDate: string;
   endDate: string;
   daysRemaining: number;
+  numberOfLeaveDays?: number;
+  purpose: string;
+  headOfDepartmentId?: string;
+  headOfDepartmentComment?: string;
 }
 
 export interface StoreRequisitionDetails {

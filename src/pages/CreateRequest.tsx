@@ -86,7 +86,7 @@ export default function CreateRequest() {
   });
 
   const [leaveDetails, setLeaveDetails] = useState<LeaveDetails>({
-    dateOfRequisition: '', issuerName: user?.email || '', applicantName: '', startDate: '', endDate: '', daysRemaining: 0
+    dateOfRequisition: '', issuerName: user?.email || '', applicantName: '', startDate: '', endDate: '', daysRemaining: 0, purpose: 'casual', headOfDepartmentId: '', headOfDepartmentComment: ''
   });
 
   const [storeRequisitionDetails, setStoreRequisitionDetails] = useState<StoreRequisitionDetails>({
@@ -482,7 +482,7 @@ export default function CreateRequest() {
       ...(requestType.startsWith('Emergency Drug Purchase') && { paymentDetails }),
       ...(requestType === 'Diesel Request' && { dieselDetails }),
       ...(requestType === 'Product Procurement' && { productProcurementDetails }),
-      ...(requestType === 'Leave Request' && { leaveDetails: { ...leaveDetails, daysRemaining: calculateLeaveDays(leaveDetails.startDate, leaveDetails.endDate) } }),
+      ...(requestType === 'Leave Request' && { leaveDetails: { ...leaveDetails, numberOfLeaveDays: calculateLeaveDays(leaveDetails.startDate, leaveDetails.endDate) } }),
       ...(requestType === 'Store Requisition' && { storeRequisitionDetails }),
       ...(requestType === 'Issue From Store' && { issueFromStoreDetails }),
     };
@@ -526,7 +526,7 @@ export default function CreateRequest() {
       ...(requestType.startsWith('Emergency Drug Purchase') && { paymentDetails }),
       ...(requestType === 'Diesel Request' && { dieselDetails }),
       ...(requestType === 'Product Procurement' && { productProcurementDetails }),
-      ...(requestType === 'Leave Request' && { leaveDetails: { ...leaveDetails, daysRemaining: calculateLeaveDays(leaveDetails.startDate, leaveDetails.endDate) } }),
+      ...(requestType === 'Leave Request' && { leaveDetails: { ...leaveDetails, numberOfLeaveDays: calculateLeaveDays(leaveDetails.startDate, leaveDetails.endDate) } }),
       ...(requestType === 'Store Requisition' && { storeRequisitionDetails }),
       ...(requestType === 'Issue From Store' && { issueFromStoreDetails }),
     };
@@ -1068,6 +1068,31 @@ export default function CreateRequest() {
                   <div className="block w-full rounded-lg border-stone-200 bg-stone-100 sm:text-sm py-2 px-3 border text-stone-700">
                     {calculateLeaveDays(leaveDetails.startDate, leaveDetails.endDate)}
                   </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-stone-500 mb-1">Remaining Leave Days</label>
+                  <input type="number" required value={leaveDetails.daysRemaining} onChange={e => setLeaveDetails({...leaveDetails, daysRemaining: parseInt(e.target.value) || 0})} className="block w-full rounded-lg border-stone-200 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm py-2 px-3 border" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-stone-500 mb-1">Purpose for Leave</label>
+                  <select required value={leaveDetails.purpose} onChange={e => setLeaveDetails({...leaveDetails, purpose: e.target.value})} className="block w-full rounded-lg border-stone-200 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm py-2 px-3 border">
+                    <option value="casual">Casual</option>
+                    <option value="sick">Sick</option>
+                    <option value="maternity">Maternity</option>
+                    <option value="official">Official</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-stone-500 mb-1">Head of Department</label>
+                  <select value={leaveDetails.headOfDepartmentId || ''} onChange={e => setLeaveDetails({...leaveDetails, headOfDepartmentId: e.target.value})} className="block w-full rounded-lg border-stone-200 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm py-2 px-3 border">
+                    <option value="">-- Select HOD from Approvers --</option>
+                    {workflowApprovers.filter(id => id).map(id => {
+                      const u = MOCK_USERS.find(user => user.id === id);
+                      return u ? <option key={u.id} value={u.id}>{u.department} - {u.email}</option> : null;
+                    })}
+                  </select>
+                  <p className="text-[10px] text-stone-400 mt-1">Add approvers to the workflow below first.</p>
                 </div>
               </div>
             </div>

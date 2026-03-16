@@ -87,60 +87,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       password,
     });
 
-    // 2. If login fails, check if they are a legacy MOCK_USER that needs to be migrated
     if (error) {
-      const mockUser = MOCK_USERS.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-      );
-
-      if (mockUser) {
-        // Auto-migrate: Sign them up to Supabase in the background
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              department: mockUser.department,
-              role: mockUser.role,
-            },
-          },
-        });
-
-        // If they are already registered but login failed, it might be a password mismatch
-        // or the profile trigger failed. Let's just log them in locally for now if they match MOCK_USERS
-        if (signUpError && (signUpError.message.includes('already registered') || signUpError.message.includes('rate limit') || signUpError.status === 429)) {
-           console.warn('Auto-migration warning:', signUpError.message);
-           const loggedInUser: User = {
-            id: mockUser.id,
-            email: mockUser.email,
-            department: mockUser.department as Department,
-            role: mockUser.role as any,
-          };
-          setUser(loggedInUser);
-          localStorage.setItem('zankli_user', JSON.stringify(loggedInUser));
-          return;
-        }
-
-        if (signUpError) {
-          throw new Error(`Migration failed: ${signUpError.message}`);
-        }
-        
-        // Wait briefly for the auth state change to pick up the profile
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        // Manually set the user so the UI updates immediately
-        const loggedInUser: User = {
-          id: signUpData.user?.id || mockUser.id,
-          email: mockUser.email,
-          department: mockUser.department as Department,
-          role: mockUser.role as any,
-        };
-        setUser(loggedInUser);
-        localStorage.setItem('zankli_user', JSON.stringify(loggedInUser));
-        return;
-      }
-      
-      throw error;
+      throw new Error(error.message);
     }
 
     // If standard login succeeds, manually fetch profile to resolve promise immediately
