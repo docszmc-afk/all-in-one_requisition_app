@@ -1212,7 +1212,7 @@ export default function CreateRequest() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-stone-500 mb-1">Number of Leave Days Left</label>
-                  <input type="number" required min="0" value={leaveDetails.leaveBalance || ''} onChange={e => setLeaveDetails({...leaveDetails, leaveBalance: parseInt(e.target.value) || 0})} className="block w-full rounded-lg border-stone-200 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm py-2 px-3 border" />
+                  <input type="number" required min="0" value={leaveDetails.leaveBalance ?? ''} onChange={e => { const val = parseInt(e.target.value, 10); setLeaveDetails({...leaveDetails, leaveBalance: isNaN(val) ? undefined : val}); }} className="block w-full rounded-lg border-stone-200 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm py-2 px-3 border" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-stone-500 mb-1">Purpose of Leave</label>

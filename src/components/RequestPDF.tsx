@@ -13,6 +13,35 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#1c1917',
   },
+  zankliHeader: {
+    marginBottom: 20,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: '#f97316',
+    paddingBottom: 15,
+  },
+  zankliTitle: {
+    fontSize: 24,
+    fontFamily: 'Helvetica-Bold',
+    color: '#ea580c',
+    marginBottom: 6,
+  },
+  zankliAddress: {
+    fontSize: 10,
+    color: '#57534e',
+    marginBottom: 3,
+  },
+  zankliContact: {
+    fontSize: 10,
+    color: '#57534e',
+    marginBottom: 12,
+  },
+  zankliSubtitle: {
+    fontSize: 12,
+    color: '#57534e',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -214,10 +243,20 @@ export default function RequestPDF({ request, vendors }: RequestPDFProps) {
   const isIssueStore = request.requestType === 'Issue From Store';
 
   const hasItems = !isHistology && !isEmergency && !isDiesel && !isLeave && request.items && request.items.length > 0;
+  const isPO = request.requestType === 'Pharmacy Purchase Order' || request.requestType === 'Lab Purchase Order';
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        {isPO && (
+          <View style={styles.zankliHeader}>
+            <Text style={styles.zankliTitle}>ZANKLI MEDICAL CENTRE</Text>
+            <Text style={styles.zankliAddress}>Plot 1021, B5, Mabushi District, Abuja</Text>
+            <Text style={styles.zankliContact}>Email: info@zanklimedicalcentre.com  |  Tel: +234 818 288 8888</Text>
+            <Text style={styles.zankliSubtitle}>Purchase Order</Text>
+          </View>
+        )}
+        
         {/* Header */}
         <View style={styles.header}>
           <View>
