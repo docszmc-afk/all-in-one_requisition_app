@@ -18,7 +18,7 @@ export default function ImageGeneration() {
     setGeneratedImage(null);
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
       if (!apiKey) {
         throw new Error('GEMINI_API_KEY is not configured in the environment.');
       }

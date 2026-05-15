@@ -290,7 +290,11 @@ export default function RequestDetails() {
     setIsMarketComparerLoading(true);
     try {
       const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error('GEMINI_API_KEY environment variable is missing');
+      }
+      const ai = new GoogleGenAI({ apiKey });
       
       const newItems = [...editableItems];
       for (let i = 0; i < newItems.length; i++) {
