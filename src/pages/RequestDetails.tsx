@@ -289,25 +289,28 @@ export default function RequestDetails() {
   const handleRunMarketComparer = async () => {
     setIsMarketComparerLoading(true);
     try {
-      const { GoogleGenAI } = await import('@google/genai');
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('GEMINI_API_KEY environment variable is missing');
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      
       const newItems = [...editableItems];
       for (let i = 0; i < newItems.length; i++) {
         const item = newItems[i];
         try {
-          const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: `What is the estimated market price in Nigerian Naira (NGN) for "${item.name}" (Quantity: ${item.quantity}, Unit: ${item.unit || 'N/A'})? Provide a short, concise answer with just the price range or estimate.`,
-            config: {
-              tools: [{ googleSearch: {} }],
-            }
+          const responseFetch = await fetch('/.netlify/functions/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'generateContent',
+              model: 'gemini-3-flash-preview',
+              contents: `What is the estimated market price in Nigerian Naira (NGN) for "${item.name}" (Quantity: ${item.quantity}, Unit: ${item.unit || 'N/A'})? Provide a short, concise answer with just the price range or estimate.`,
+              config: {
+                tools: [{ googleSearch: {} }],
+              }
+            })
           });
-          newItems[i].aiMarketPrice = response.text || 'N/A';
+
+          if (!responseFetch.ok) {
+            throw new Error(`Failed with status: ${responseFetch.status}`);
+          }
+          const resultObj = await responseFetch.json();
+          newItems[i].aiMarketPrice = resultObj.text || 'N/A';
         } catch (e) {
           console.error("Error fetching market price for", item.name, e);
           newItems[i].aiMarketPrice = 'Error fetching price';

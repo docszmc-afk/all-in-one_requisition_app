@@ -296,13 +296,6 @@ export default function CreateRequest() {
 
     setIsAILoading(true);
     try {
-      const { GoogleGenAI, Type } = await import('@google/genai');
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('GEMINI_API_KEY environment variable is missing');
-      }
-      const ai = new GoogleGenAI({ apiKey });
-
       let textContent = '';
       let inlineData: any = null;
 
@@ -338,22 +331,22 @@ export default function CreateRequest() {
       if (requestType === 'Histology Payment') {
         prompt = `Extract all histology payment details from the provided document. Return a JSON object with a 'details' array. Each item should have: date (YYYY-MM-DD), patientName, hospNo, labNo, outsourceService, outsourceBill (number), zmcCharges (number), receiptHmo, retainership. If a field is not found, leave it empty.`;
         schema = {
-          type: Type.OBJECT,
+          type: "OBJECT",
           properties: {
             details: {
-              type: Type.ARRAY,
+              type: "ARRAY",
               items: {
-                type: Type.OBJECT,
+                type: "OBJECT",
                 properties: {
-                  date: { type: Type.STRING },
-                  patientName: { type: Type.STRING },
-                  hospNo: { type: Type.STRING },
-                  labNo: { type: Type.STRING },
-                  outsourceService: { type: Type.STRING },
-                  outsourceBill: { type: Type.NUMBER },
-                  zmcCharges: { type: Type.NUMBER },
-                  receiptHmo: { type: Type.STRING },
-                  retainership: { type: Type.STRING },
+                  date: { type: "STRING" },
+                  patientName: { type: "STRING" },
+                  hospNo: { type: "STRING" },
+                  labNo: { type: "STRING" },
+                  outsourceService: { type: "STRING" },
+                  outsourceBill: { type: "NUMBER" },
+                  zmcCharges: { type: "NUMBER" },
+                  receiptHmo: { type: "STRING" },
+                  retainership: { type: "STRING" },
                 }
               }
             }
@@ -362,19 +355,19 @@ export default function CreateRequest() {
       } else if (requestType === 'Pharmacy Purchase Order' || requestType === 'Lab Purchase Order') {
         prompt = `Extract the list of items to purchase from the provided document. Return a JSON object with an 'items' array. Each item should have: name, description, quantity (number), unit, estimatedCost (number), supplier. If a field is not found, leave it empty.`;
         schema = {
-          type: Type.OBJECT,
+          type: "OBJECT",
           properties: {
             items: {
-              type: Type.ARRAY,
+              type: "ARRAY",
               items: {
-                type: Type.OBJECT,
+                type: "OBJECT",
                 properties: {
-                  name: { type: Type.STRING },
-                  description: { type: Type.STRING },
-                  quantity: { type: Type.NUMBER },
-                  unit: { type: Type.STRING },
-                  estimatedCost: { type: Type.NUMBER },
-                  supplier: { type: Type.STRING },
+                  name: { type: "STRING" },
+                  description: { type: "STRING" },
+                  quantity: { type: "NUMBER" },
+                  unit: { type: "STRING" },
+                  estimatedCost: { type: "NUMBER" },
+                  supplier: { type: "STRING" },
                 }
               }
             }
@@ -386,20 +379,32 @@ export default function CreateRequest() {
       if (textContent) parts.push({ text: textContent });
       if (inlineData) parts.push({ inlineData });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: { parts },
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: schema,
-        }
+      const responseFetch = await fetch('/.netlify/functions/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generateContent',
+          model: 'gemini-3-flash-preview',
+          contents: { parts },
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: schema,
+          }
+        })
       });
 
-      if (!response.text) {
+      if (!responseFetch.ok) {
+        const errData = await responseFetch.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to extract data: ${responseFetch.statusText}`);
+      }
+
+      const resultObj = await responseFetch.json();
+      
+      if (!resultObj.text) {
         throw new Error('No response text from AI');
       }
 
-      const result = JSON.parse(response.text);
+      const result = JSON.parse(resultObj.text);
 
       if (requestType === 'Histology Payment') {
         if (result.details && result.details.length > 0) {

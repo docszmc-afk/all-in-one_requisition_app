@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Image as ImageIcon, Loader2, Download, AlertCircle } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 
 export default function ImageGeneration() {
   const [prompt, setPrompt] = useState('');
@@ -18,35 +17,25 @@ export default function ImageGeneration() {
     setGeneratedImage(null);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('GEMINI_API_KEY is not configured in the environment.');
-      }
-      const ai = new GoogleGenAI({ apiKey });
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: {
-          parts: [
-            { text: prompt }
-          ]
-        }
+      const response = await fetch('/.netlify/functions/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generateImages',
+          model: 'gemini-2.5-flash-image',
+          prompt: prompt,
+        })
       });
 
-      let foundImage = false;
-      if (response.candidates && response.candidates.length > 0) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData) {
-            const base64EncodeString = part.inlineData.data;
-            const imageUrl = `data:${part.inlineData.mimeType || 'image/png'};base64,${base64EncodeString}`;
-            setGeneratedImage(imageUrl);
-            foundImage = true;
-            break;
-          }
-        }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to generate image (Status ${response.status})`);
       }
 
-      if (!foundImage) {
+      const result = await response.json();
+      if (result.base64) {
+        setGeneratedImage(`data:image/jpeg;base64,${result.base64}`);
+      } else {
         throw new Error('No image was returned by the model.');
       }
 
