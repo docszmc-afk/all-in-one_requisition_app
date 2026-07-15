@@ -322,9 +322,9 @@ export default function Email() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
         {isComposing ? (
-          <div className="flex-1 flex flex-col bg-white h-full">
+          <div className="flex-1 flex flex-col min-h-0 bg-white h-full">
             <div className="p-4 border-b border-stone-200 flex items-center justify-between bg-stone-50 shrink-0">
               <div className="flex items-center">
                 <button onClick={() => setIsComposing(false)} className="mr-3 p-1.5 text-stone-400 hover:text-stone-600 rounded-lg hover:bg-stone-200 transition-colors">
@@ -401,7 +401,7 @@ export default function Email() {
             </div>
           </div>
         ) : selectedEmail ? (
-          <div className="flex-1 flex flex-col bg-white">
+          <div className="flex-1 flex flex-col min-h-0 bg-white">
             <div className="p-4 border-b border-stone-200 flex items-center justify-between bg-stone-50">
               <div className="flex items-center">
                 <button onClick={() => setSelectedEmail(null)} className="mr-3 p-1.5 text-stone-400 hover:text-stone-600 rounded-lg hover:bg-stone-200 transition-colors">
@@ -480,7 +480,7 @@ export default function Email() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0">
             <div className="p-4 border-b border-stone-200 bg-white flex items-center justify-between">
               <h2 className="text-lg font-semibold text-stone-900 capitalize">{currentFolder}</h2>
               <div className="relative">

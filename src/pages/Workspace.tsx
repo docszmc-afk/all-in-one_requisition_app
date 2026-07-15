@@ -89,7 +89,7 @@ export default function Workspace() {
   return (
     <div className="h-[calc(100vh-8rem)] flex gap-6">
       {/* Task Allocator (Kanban) */}
-      <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
         <div className="p-4 border-b border-stone-200 bg-stone-50 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-bold text-stone-900">Task Allocator</h2>
@@ -113,7 +113,7 @@ export default function Workspace() {
         <div className="flex-1 overflow-x-auto p-4">
           <div className="flex gap-4 h-full min-w-max">
             {STATUSES.map(status => (
-              <div key={status} className="w-80 flex flex-col bg-stone-50 rounded-xl border border-stone-200">
+              <div key={status} className="w-80 flex flex-col min-h-0 bg-stone-50 rounded-xl border border-stone-200">
                 <div className="p-3 border-b border-stone-200 font-semibold text-stone-700 flex justify-between items-center">
                   {status}
                   <span className="bg-stone-200 text-stone-600 text-xs px-2 py-0.5 rounded-full">
@@ -204,7 +204,7 @@ export default function Workspace() {
       </div>
 
       {/* Live Chat */}
-      <div className="w-96 flex flex-col bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
+      <div className="w-96 flex flex-col min-h-0 bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
         <div className="p-4 border-b border-stone-200 bg-stone-50">
           <h2 className="text-lg font-bold text-stone-900">Live Chat</h2>
           <p className="text-xs text-stone-500">Facility & Admin Workspace</p>

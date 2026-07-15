@@ -5,7 +5,7 @@ import { useProcurement } from '../context/ProcurementContext';
 import { useVendors } from '../context/VendorContext';
 import { motion } from 'framer-motion';
 import { format, formatDistanceStrict } from 'date-fns';
-import { ArrowLeft, CheckCircle, XCircle, Clock, FileText, User, AlertTriangle, Tag, Edit, RotateCcw, Paperclip, Download, Maximize2, X, FileDown, BellRing, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, FileText, User, AlertTriangle, Tag, Edit, RotateCcw, Paperclip, Download, Maximize2, X, FileDown, BellRing, AlertCircle, Loader2 } from 'lucide-react';
 import SignaturePad from '../components/SignaturePad';
 import { Attachment, ProcurementItem, ProcurementRequest, HistologyDetails } from '../types';
 import { pdf } from '@react-pdf/renderer';
@@ -38,6 +38,7 @@ export default function RequestDetails() {
   const [isSendingUrgent, setIsSendingUrgent] = useState(false);
 
   const [isVoiding, setIsVoiding] = useState(false);
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
   const request = requests.find(r => r.id === id);
 
@@ -332,6 +333,8 @@ export default function RequestDetails() {
 
 
   const handleAction = async (action: 'Approve' | 'Reject' | 'Sent Back') => {
+    if (isSubmittingAction) return;
+    
     if (!approverSignature) {
       addNotification({
         userId: user?.id || 'system',
@@ -342,83 +345,90 @@ export default function RequestDetails() {
       return;
     }
 
-    let finalSignatureUrl = approverSignature;
-    if (approverSignature.startsWith('data:')) {
-      try {
-        finalSignatureUrl = await uploadBase64(approverSignature, 'signature.png');
-      } catch (error) {
-        console.error('Error uploading signature:', error);
-        addNotification({
-          userId: user?.id || 'system',
-          title: 'Upload Error',
-          message: 'Failed to upload signature.',
-          type: 'error',
+    setIsSubmittingAction(true);
+    try {
+      let finalSignatureUrl = approverSignature;
+      if (approverSignature.startsWith('data:')) {
+        try {
+          finalSignatureUrl = await uploadBase64(approverSignature, 'signature.png');
+        } catch (error) {
+          console.error('Error uploading signature:', error);
+          addNotification({
+            userId: user?.id || 'system',
+            title: 'Upload Error',
+            message: 'Failed to upload signature.',
+            type: 'error',
+          });
+          setIsSubmittingAction(false);
+          return;
+        }
+      }
+
+      if (isStoreEditing || isAuditEditing) {
+        await updateRequest(request.id, { 
+          items: editableItems,
+          histologyDetailsList: editableHistologyDetails.length > 0 ? editableHistologyDetails : undefined,
+          // If it was a single detail originally, we might want to keep it synced, but list is preferred now
+          histologyDetails: editableHistologyDetails.length === 1 ? editableHistologyDetails[0] : undefined,
+          ...(isAuditEditing && recommendedAmount !== '' ? { recommendedAmount: Number(recommendedAmount) } : {})
         });
-        return;
-      }
-    }
-
-    if (isStoreEditing || isAuditEditing) {
-      await updateRequest(request.id, { 
-        items: editableItems,
-        histologyDetailsList: editableHistologyDetails.length > 0 ? editableHistologyDetails : undefined,
-        // If it was a single detail originally, we might want to keep it synced, but list is preferred now
-        histologyDetails: editableHistologyDetails.length === 1 ? editableHistologyDetails[0] : undefined,
-        ...(isAuditEditing && recommendedAmount !== '' ? { recommendedAmount: Number(recommendedAmount) } : {})
-      });
-    }
-
-    if (isDynamicWorkflow) {
-      const status = action === 'Approve' ? 'Approved' : action === 'Reject' ? 'Rejected' : 'Sent Back';
-      
-      // Check for Out of Stock items and notify Lab (or creator)
-      if (status === 'Approved' && isStoreEditing) {
-         const outOfStockItems = editableItems.filter(i => i.availability === 'Out of Stock');
-         if (outOfStockItems.length > 0) {
-            const labUser = MOCK_USERS.find(u => u.email === 'labzankli@gmail.com');
-            if (labUser) {
-              sendEmail({
-                senderId: user!.id,
-                toIds: [labUser.id],
-                ccIds: [],
-                bccIds: [],
-                attachments: [],
-                subject: `Items Out of Stock: ${request.title}`,
-                body: `The following items are out of stock and were removed from the request ${request.id}:\n\n${outOfStockItems.map(i => `- ${i.name} (Qty: ${i.quantity})`).join('\n')}`
-              });
-              addNotification({
-                userId: labUser.id,
-                title: 'Items Out of Stock',
-                message: `${outOfStockItems.length} items were marked as Out of Stock in request ${request.id}`,
-                type: 'warning',
-                link: `/requests/${request.id}`
-              });
-            }
-         }
       }
 
-      await processApproval(request.id, user!.id, status, finalSignatureUrl, notes, editableItems);
-    } else {
-      if (canApproveAudit) {
-        await updateRequestStatus(
-          request.id, 
-          action === 'Approve' ? 'Pending Accounts' : action === 'Sent Back' ? 'Sent Back' : 'Rejected', 
-          notes, 
-          'Audit',
-          finalSignatureUrl
-        );
-      } else if (canApproveAccounts) {
-        await updateRequestStatus(
-          request.id, 
-          action === 'Approve' ? 'Approved' : action === 'Sent Back' ? 'Sent Back' : 'Rejected', 
-          notes, 
-          'Accounts',
-          finalSignatureUrl
-        );
-      }
-    }
+      if (isDynamicWorkflow) {
+        const status = action === 'Approve' ? 'Approved' : action === 'Reject' ? 'Rejected' : 'Sent Back';
+        
+        // Check for Out of Stock items and notify Lab (or creator)
+        if (status === 'Approved' && isStoreEditing) {
+           const outOfStockItems = editableItems.filter(i => i.availability === 'Out of Stock');
+           if (outOfStockItems.length > 0) {
+              const labUser = MOCK_USERS.find(u => u.email === 'labzankli@gmail.com');
+              if (labUser) {
+                sendEmail({
+                  senderId: user!.id,
+                  toIds: [labUser.id],
+                  ccIds: [],
+                  bccIds: [],
+                  attachments: [],
+                  subject: `Items Out of Stock: ${request.title}`,
+                  body: `The following items are out of stock and were removed from the request ${request.id}:\n\n${outOfStockItems.map(i => `- ${i.name} (Qty: ${i.quantity})`).join('\n')}`
+                });
+                addNotification({
+                  userId: labUser.id,
+                  title: 'Items Out of Stock',
+                  message: `${outOfStockItems.length} items were marked as Out of Stock in request ${request.id}`,
+                  type: 'warning',
+                  link: `/requests/${request.id}`
+                });
+              }
+           }
+        }
 
-    navigate('/requests');
+        await processApproval(request.id, user!.id, status, finalSignatureUrl, notes, editableItems);
+      } else {
+        if (canApproveAudit) {
+          await updateRequestStatus(
+            request.id, 
+            action === 'Approve' ? 'Pending Accounts' : action === 'Sent Back' ? 'Sent Back' : 'Rejected', 
+            notes, 
+            'Audit',
+            finalSignatureUrl
+          );
+        } else if (canApproveAccounts) {
+          await updateRequestStatus(
+            request.id, 
+            action === 'Approve' ? 'Approved' : action === 'Sent Back' ? 'Sent Back' : 'Rejected', 
+            notes, 
+            'Accounts',
+            finalSignatureUrl
+          );
+        }
+      }
+
+      navigate('/requests');
+    } catch (error) {
+      console.error('Error handling action:', error);
+      setIsSubmittingAction(false);
+    }
   };
 
   const isHistology = request.requestType === 'Histology Payment';
@@ -1825,22 +1835,29 @@ export default function RequestDetails() {
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => handleAction('Approve')}
-                    className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors"
+                    disabled={isSubmittingAction}
+                    className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Approve
+                    {isSubmittingAction ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                    )}
+                    {isSubmittingAction ? 'Approving...' : 'Approve'}
                   </button>
                   <div className="flex gap-3">
                     <button
                       onClick={() => handleAction('Sent Back')}
-                      className="flex-1 inline-flex justify-center items-center px-4 py-2 border border-purple-200 text-sm font-medium rounded-xl shadow-sm text-purple-700 bg-purple-50 hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors"
+                      disabled={isSubmittingAction}
+                      className="flex-1 inline-flex justify-center items-center px-4 py-2 border border-purple-200 text-sm font-medium rounded-xl shadow-sm text-purple-700 bg-purple-50 hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <RotateCcw className="w-4 h-4 mr-2" />
                       Send Back
                     </button>
                     <button
                       onClick={() => handleAction('Reject')}
-                      className="flex-1 inline-flex justify-center items-center px-4 py-2 border border-red-200 text-sm font-medium rounded-xl shadow-sm text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                      disabled={isSubmittingAction}
+                      className="flex-1 inline-flex justify-center items-center px-4 py-2 border border-red-200 text-sm font-medium rounded-xl shadow-sm text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <XCircle className="w-4 h-4 mr-2" />
                       Reject
