@@ -1,19 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { useProcurement } from '../context/ProcurementContext';
 import { useAuth, MOCK_USERS } from '../context/AuthContext';
-import { format } from 'date-fns';
-import { CheckCircle, FileText, Search, CreditCard, Mail, Paperclip, BarChart3, TrendingUp, PieChart as PieChartIcon, Download } from 'lucide-react';
+import { useVouchers } from '../context/VoucherContext';
+import { format, parseISO, startOfMonth } from 'date-fns';
+import { CheckCircle, FileText, Search, CreditCard, Mail, Paperclip, BarChart3, TrendingUp, PieChart as PieChartIcon, Download, Activity } from 'lucide-react';
 import { Attachment } from '../types';
 import { useNotifications } from '../context/NotificationContext';
 import { uploadFile } from '../lib/storage';
 import { useEmail } from '../context/EmailContext';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1'];
 
 export default function AccountingSuite() {
   const { requests, markAsPaid, requestAccountNumber } = useProcurement();
   const { user } = useAuth();
+  const { vouchers } = useVouchers();
   const { addNotification } = useNotifications();
   const { sendEmail } = useEmail();
   const [activeTab, setActiveTab] = useState<'requests' | 'analytics'>('requests');
@@ -64,6 +66,30 @@ export default function AccountingSuite() {
     });
     return Object.entries(data).map(([name, stats]) => ({ name, ...stats })).sort((a, b) => b.total - a.total).slice(0, 10);
   }, [completedRequests]);
+
+  const voucherMonthlyTrend = useMemo(() => {
+    const data: Record<string, { processed: number; pending: number; monthValue: number }> = {};
+    
+    vouchers.forEach(v => {
+      const date = parseISO(v.created_at);
+      const monthStart = startOfMonth(date);
+      const monthStr = format(monthStart, 'MMM yyyy');
+      
+      if (!data[monthStr]) {
+        data[monthStr] = { processed: 0, pending: 0, monthValue: monthStart.getTime() };
+      }
+      
+      if (v.status === 'final_payable' || v.status === 'negotiated') {
+        data[monthStr].processed += 1;
+      } else {
+        data[monthStr].pending += 1;
+      }
+    });
+    
+    return Object.entries(data)
+      .map(([name, stats]) => ({ name, ...stats }))
+      .sort((a, b) => a.monthValue - b.monthValue);
+  }, [vouchers]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, requestId: string) => {
     const file = e.target.files?.[0];
@@ -324,6 +350,29 @@ export default function AccountingSuite() {
           {activeTab === 'analytics' && (
             <div className="space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200 lg:col-span-2">
+                  <h3 className="text-lg font-semibold text-stone-900 mb-6 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-orange-500" />
+                    Voucher Workload Trend
+                  </h3>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={voucherMonthlyTrend}
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="processed" name="Processed Vouchers" stroke="#10b981" strokeWidth={2} activeDot={{ r: 8 }} />
+                        <Line type="monotone" dataKey="pending" name="Pending Vouchers" stroke="#f59e0b" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
                 <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200">
                   <h3 className="text-lg font-semibold text-stone-900 mb-6 flex items-center gap-2">
                     <PieChartIcon className="w-5 h-5 text-orange-500" />

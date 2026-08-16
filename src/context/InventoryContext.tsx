@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { InventoryItem } from '../types';
 import { supabase } from '../lib/supabase';
 import { useNotifications } from './NotificationContext';
+import { toast } from 'sonner';
 
 interface InventoryContextType {
   inventory: InventoryItem[];
@@ -28,8 +29,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             unitCost: item.unit_cost !== undefined ? item.unit_cost : (item.unitCost || 0),
           })));
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching inventory:', error);
+        if (error?.message === 'Failed to fetch' || error?.message?.includes('Failed to fetch')) {
+           toast.error('Network Error: Could not connect to the database. Please check your internet connection or ensure your Supabase project is active.');
+        } else {
+           toast.error('Failed to load inventory data');
+        }
       }
     };
     fetchInventory();

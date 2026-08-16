@@ -22,6 +22,10 @@ import { useEmail } from '../context/EmailContext';
 import { useFacilityRequests } from '../context/FacilityRequestContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useITSupport } from '../context/ITSupportContext';
+import { useVouchers } from '../context/VoucherContext';
+import { useTasks } from '../context/TaskContext';
+
+import { createPortal } from 'react-dom';
 
 export default function Sidebar({ onClose }: { onClose: () => void }) {
   const { user, logout } = useAuth();
@@ -29,6 +33,8 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
   const { facilityRequests } = useFacilityRequests();
   const { tasks } = useWorkspace();
   const { tickets } = useITSupport();
+  const { vouchers } = useVouchers();
+  const { tasks: kanbanTasks } = useTasks();
   const { requestPermission } = useNotifications();
   const navigate = useNavigate();
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
@@ -37,7 +43,14 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
   // Calculate badges
   const facilityRequestBadge = facilityRequests.filter(r => r.status === 'Pending').length;
   const workspaceBadge = tasks.filter(t => t.status !== 'Done').length;
+  const kanbanBadge = kanbanTasks.filter(t => t.status !== 'done').length;
   const itSupportBadge = tickets.filter(t => t.status !== 'Resolved' && t.status !== 'Unfixable').length;
+  
+  const isApprover = user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com';
+  const isAccounts = user?.department === 'Accounts';
+  const vouchersBadge = isApprover 
+    ? vouchers.filter(v => v.status === 'pending' && !v.is_queried).length 
+    : (isAccounts ? vouchers.filter(v => v.status === 'approved' && !v.is_queried).length : 0);
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -80,11 +93,13 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
       { to: '/inventory', icon: Package, label: 'Store Management' }
     ] : []),
     ...(user?.department === 'Facility' || user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com' ? [
-      { to: '/workspace', icon: Briefcase, label: 'Facility Workspace', badge: workspaceBadge > 0 ? workspaceBadge : undefined }
+      { to: '/workspace', icon: Briefcase, label: 'Facility Workspace', badge: workspaceBadge > 0 ? workspaceBadge : undefined },
+      { to: '/task-boards', icon: List, label: 'Task Management', badge: kanbanBadge > 0 ? kanbanBadge : undefined }
     ] : []),
     ...(user?.department === 'Accounts' ? [
       { to: '/accounting', icon: Briefcase, label: 'Accounting Suite' }
     ] : []),
+    { to: '/vouchers', icon: List, label: 'Payment Vouchers', badge: vouchersBadge > 0 ? vouchersBadge : undefined },
     { to: '/it-support', icon: Settings, label: 'IT Support', badge: itSupportBadge > 0 ? itSupportBadge : undefined },
     { to: '/email', icon: Mail, label: 'Internal Mail', badge: unreadCount > 0 ? unreadCount : undefined },
   ];
@@ -126,7 +141,7 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        <div className="p-4 border-t border-zinc-800">
+        <div className="p-4 border-t border-zinc-800 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="flex items-center w-full px-4 py-3 mb-2 text-sm font-medium text-stone-400 rounded-xl hover:bg-zinc-900 hover:text-stone-200 transition-colors"
@@ -145,8 +160,8 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Settings Modal */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {isSettingsOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b border-stone-100">
               <h2 className="text-xl font-bold text-stone-800">Settings</h2>
@@ -211,7 +226,8 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

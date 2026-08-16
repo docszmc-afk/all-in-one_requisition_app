@@ -14,6 +14,8 @@ import { WorkspaceProvider } from './context/WorkspaceContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { FacilityRequestProvider } from './context/FacilityRequestContext';
 import { ITSupportProvider } from './context/ITSupportContext';
+import { VoucherProvider } from './context/VoucherContext';
+import { TaskProvider } from './context/TaskContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -27,6 +29,8 @@ import Workspace from './pages/Workspace';
 import AccountingSuite from './pages/AccountingSuite';
 import FacilityRequests from './pages/FacilityRequests';
 import ITSupport from './pages/ITSupport';
+import Vouchers from './pages/Vouchers';
+import TaskBoard from './pages/TaskBoard';
 
 import { Toaster } from 'sonner';
 
@@ -41,26 +45,32 @@ export default function App() {
                 <EmailProvider>
                   <ITSupportProvider>
                     <WorkspaceProvider>
-                      <BrowserRouter>
-                        <Toaster position="top-right" richColors />
-                        <Routes>
-                          <Route path="/login" element={<Login />} />
-                          <Route path="/" element={<Layout />}>
-                            <Route index element={<Dashboard />} />
-                            <Route path="requests" element={<RequestList />} />
-                            <Route path="requests/new" element={<CreateRequest />} />
-                            <Route path="requests/edit/:id" element={<CreateRequest />} />
-                            <Route path="requests/:id" element={<RequestDetails />} />
-                            <Route path="vendors" element={<Vendors />} />
-                            <Route path="inventory" element={<Inventory />} />
-                            <Route path="email" element={<Email />} />
-                            <Route path="workspace" element={<Workspace />} />
-                            <Route path="accounting" element={<AccountingSuite />} />
-                            <Route path="facility-requests" element={<FacilityRequests />} />
-                            <Route path="it-support" element={<ITSupport />} />
-                          </Route>
-                        </Routes>
-                      </BrowserRouter>
+                      <VoucherProvider>
+                        <TaskProvider>
+                        <BrowserRouter>
+                          <Toaster position="top-right" richColors />
+                          <Routes>
+                            <Route path="/login" element={<Login />} />
+                            <Route path="/" element={<Layout />}>
+                              <Route index element={<Dashboard />} />
+                              <Route path="requests" element={<RequestList />} />
+                              <Route path="requests/new" element={<CreateRequest />} />
+                              <Route path="requests/edit/:id" element={<CreateRequest />} />
+                              <Route path="requests/:id" element={<RequestDetails />} />
+                              <Route path="vendors" element={<Vendors />} />
+                              <Route path="inventory" element={<Inventory />} />
+                              <Route path="email" element={<Email />} />
+                              <Route path="workspace" element={<Workspace />} />
+                              <Route path="accounting" element={<AccountingSuite />} />
+                              <Route path="facility-requests" element={<FacilityRequests />} />
+                              <Route path="it-support" element={<ITSupport />} />
+                              <Route path="vouchers" element={<Vouchers />} />
+                              <Route path="task-boards" element={<TaskBoard />} />
+                            </Route>
+                          </Routes>
+                        </BrowserRouter>
+                      </TaskProvider>
+                      </VoucherProvider>
                     </WorkspaceProvider>
                   </ITSupportProvider>
                 </EmailProvider>

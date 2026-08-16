@@ -8,7 +8,7 @@ import { Search, Filter, ChevronRight, ChevronLeft, FileText } from 'lucide-reac
 
 export default function RequestList() {
   const { user } = useAuth();
-  const { requests } = useProcurement();
+  const { requests, loading } = useProcurement();
   const [searchParams] = useSearchParams();
   const initialStatus = searchParams.get('status') || 'All';
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,6 +25,10 @@ export default function RequestList() {
       setStatusFilter(status);
     }
   }, [searchParams]);
+
+  if (loading) {
+    return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>;
+  }
 
   const userRequests = user?.role === 'Creator' 
     ? requests.filter(r => r.department === user.department)

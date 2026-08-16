@@ -289,6 +289,27 @@ export interface TicketMessage {
   isSystem?: boolean;
 }
 
+export interface Voucher {
+  id: string;
+  created_at: string;
+  created_by?: string | null;
+  creator_email: string;
+  department: string;
+  title: string;
+  description: string;
+  amount_requested: number;
+  payee_name: string;
+  memo?: string | null;
+  attachment_url?: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'sent_back' | 'final_payable' | 'negotiated';
+  approver_email?: string | null;
+  approver_comments?: string | null;
+  final_amount?: number | null;
+  account_comments?: string | null;
+  is_queried: boolean;
+  query_notes?: string | null;
+}
+
 export interface Ticket {
   id: string;
   title: string;
@@ -301,4 +322,55 @@ export interface Ticket {
   updatedAt: string;
   messages: TicketMessage[];
   resolution?: string;
+}
+
+export interface TaskBoard {
+  id: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  is_archived: boolean;
+  created_at: string;
+  created_by: string;
+}
+
+export interface KanbanTask {
+  id: string;
+  board_id: string;
+  title: string;
+  description: string;
+  status: 'todo' | 'in_progress' | 'done';
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  created_by_email: string;
+}
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  content: string;
+  created_at: string;
+  user_id: string;
+  user_email: string;
+}
+
+export interface TaskAttachment {
+  id: string;
+  task_id: string;
+  file_name: string;
+  file_url: string;
+  created_at: string;
+  uploaded_by: string;
+  uploaded_by_email: string;
+}
+
+export interface VoucherApproval {
+  id: string;
+  voucher_id: string;
+  user_email: string;
+  role: string;
+  signature_type: 'password_stamp' | 'drawn_signature';
+  signature_data: string;
+  created_at: string;
 }

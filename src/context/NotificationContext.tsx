@@ -3,6 +3,7 @@ import { AppNotification } from '../types';
 import { useAuth, MOCK_USERS } from './AuthContext';
 import { supabase } from '../lib/supabase';
 import { sendEmailNotification } from '../lib/emailjs';
+import { toast } from 'sonner';
 
 interface NotificationContextType {
   notifications: AppNotification[];
@@ -63,19 +64,32 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       newNotifs.forEach(n => {
         const isForUser = n && (!n.userId || n.userId === user?.id || n.userId === user?.email || n.userId === user?.department);
         
-        if (isForUser && !n.read && 'Notification' in window && Notification.permission === 'granted') {
-          try {
-            const notification = new Notification(n.title, {
-              body: n.message,
-              icon: '/vite.svg', // Fallback icon
-            });
-            
-            notification.onclick = () => {
-              window.focus();
-              notification.close();
-            };
-          } catch (error) {
-            console.error('Failed to show notification:', error);
+        if (isForUser && !n.read) {
+          // Trigger a Sonner toast inside the app
+          if (n.type === 'error') {
+            toast.error(n.title, { description: n.message, duration: 5000 });
+          } else if (n.type === 'success') {
+            toast.success(n.title, { description: n.message, duration: 5000 });
+          } else if (n.type === 'warning') {
+            toast.warning(n.title, { description: n.message, duration: 5000 });
+          } else {
+            toast.info(n.title, { description: n.message, duration: 5000 });
+          }
+
+          if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+              const notification = new Notification(n.title, {
+                body: n.message,
+                icon: '/vite.svg', // Fallback icon
+              });
+              
+              notification.onclick = () => {
+                window.focus();
+                notification.close();
+              };
+            } catch (error) {
+              console.error('Failed to show notification:', error);
+            }
           }
         }
       });
@@ -131,18 +145,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       );
 
       if (!result.success) {
-        // Show an in-app error so the user knows EmailJS failed
-        const errorNotification: AppNotification = {
-          id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9),
-          userId: user?.id || 'system',
-          title: 'Email Delivery Failed',
-          message: `Could not send email to ${email}. Error: ${result.error}`,
-          type: 'error',
-          createdAt: new Date().toISOString(),
-          read: false,
-        };
-        setNotifications(prev => [...prev, errorNotification]);
-        await supabase.from('notifications').insert(errorNotification);
+        console.warn(`Failed to send email to ${email}: ${result.error}`);
       }
     });
   };

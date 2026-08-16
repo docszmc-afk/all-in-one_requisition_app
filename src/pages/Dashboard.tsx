@@ -22,7 +22,7 @@ import { format } from 'date-fns';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { requests, refreshRequests } = useProcurement();
+  const { requests, refreshRequests, loading } = useProcurement();
   const { addNotification, notifications } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState<string>('All');
@@ -198,6 +198,10 @@ export default function Dashboard() {
       }
     }
   }, [overdueInspections, user, notifications, addNotification]);
+
+  if (loading) {
+    return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>;
+  }
 
   return (
     <div className="space-y-6">

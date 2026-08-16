@@ -268,7 +268,7 @@ export default function Email() {
   return (
     <div className="h-[calc(100vh-8rem)] flex bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
       {/* Sidebar */}
-      <div className="w-64 border-r border-stone-200 bg-stone-50 flex flex-col">
+      <div className="hidden md:flex w-64 border-r border-stone-200 bg-stone-50 flex-col">
         <div className="p-4">
           <button
             onClick={() => {
@@ -429,26 +429,26 @@ export default function Email() {
                 </div>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <h1 className="text-2xl font-bold text-stone-900 mb-6">{selectedEmail.subject}</h1>
-              <div className="flex items-center justify-between mb-8 pb-6 border-b border-stone-100">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6">
+              <h1 className="text-xl md:text-2xl font-bold text-stone-900 mb-4 md:mb-6">{selectedEmail.subject}</h1>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8 pb-6 border-b border-stone-100">
                 <div className="flex items-center">
-                  <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-700 font-bold text-lg mr-4">
+                  <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-700 font-bold text-lg mr-4 shrink-0">
                     {getUserEmail(selectedEmail.senderId).charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-stone-900">{getUserEmail(selectedEmail.senderId)}</p>
-                    <p className="text-xs text-stone-500">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-stone-900 truncate">{getUserEmail(selectedEmail.senderId)}</p>
+                    <p className="text-xs text-stone-500 break-words line-clamp-2 md:line-clamp-none">
                       To: {selectedEmail.toIds.map(getUserEmail).join(', ')}
                       {selectedEmail.ccIds.length > 0 && ` | CC: ${selectedEmail.ccIds.map(getUserEmail).join(', ')}`}
                     </p>
                   </div>
                 </div>
-                <div className="text-sm text-stone-500">
+                <div className="text-xs md:text-sm text-stone-500 shrink-0">
                   {format(new Date(selectedEmail.createdAt), 'MMM d, yyyy h:mm a')}
                 </div>
               </div>
-              <div className="prose max-w-none text-stone-800 whitespace-pre-wrap mb-8">
+              <div className="prose prose-sm md:prose-base max-w-none text-stone-800 whitespace-pre-wrap break-words mb-8">
                 {selectedEmail.body}
               </div>
 
@@ -481,8 +481,38 @@ export default function Email() {
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0">
-            <div className="p-4 border-b border-stone-200 bg-white flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-stone-900 capitalize">{currentFolder}</h2>
+            <div className="p-4 border-b border-stone-200 bg-white flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <h2 className="hidden md:block text-lg font-semibold text-stone-900 capitalize">{currentFolder}</h2>
+                  <select 
+                    value={currentFolder} 
+                    onChange={(e) => setCurrentFolder(e.target.value as Folder)}
+                    className="md:hidden text-lg font-semibold text-stone-900 capitalize bg-transparent border-none p-0 focus:ring-0 cursor-pointer"
+                  >
+                    <option value="inbox">Inbox {getUnreadCount('inbox') > 0 ? `(${getUnreadCount('inbox')})` : ''}</option>
+                    <option value="sent">Sent</option>
+                    <option value="archive">Archive</option>
+                    <option value="trash">Trash</option>
+                  </select>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsComposing(true);
+                    setSelectedEmail(null);
+                    setToIds([]);
+                    setCcIds([]);
+                    setBccIds([]);
+                    setSubject('');
+                    setBody('');
+                    setAttachments([]);
+                  }}
+                  className="md:hidden flex items-center justify-center px-3 py-1.5 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors shadow-sm text-sm"
+                >
+                  <Edit3 className="w-4 h-4 mr-1.5" />
+                  Compose
+                </button>
+              </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="h-4 w-4 text-stone-400" />

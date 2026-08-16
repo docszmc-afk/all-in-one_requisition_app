@@ -41,7 +41,11 @@ export const sendEmailNotification = async (
     console.log('Email sent successfully:', response.status, response.text);
     return { success: true };
   } catch (error: any) {
-    console.error('Failed to send email notification:', error);
+    if (error?.status === 429) {
+      console.warn('EmailJS rate limit exceeded. Email notification skipped.', error?.text);
+      return { success: false, error: 'Rate limit exceeded' };
+    }
+    console.warn('Failed to send email notification:', error);
     return { success: false, error: error?.text || error?.message || 'Unknown EmailJS error' };
   }
 };

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Lock, PenTool } from 'lucide-react';
 
 interface SignaturePadProps {
-  onSave: (signature: string) => void;
+  onSave: (signature: string, type: 'drawn_signature' | 'password_stamp') => void;
   onClear?: () => void;
 }
 
@@ -22,13 +22,6 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onClear }) => {
     setPassword('');
     setError('');
     if (onClear) onClear();
-  };
-
-  const handleEnd = () => {
-    setIsEmpty(sigCanvas.current?.isEmpty() ?? true);
-    if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
-      onSave(sigCanvas.current.getCanvas().toDataURL('image/png'));
-    }
   };
 
   const generateStamp = () => {
@@ -69,7 +62,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onClear }) => {
 
     if (verifyPassword(password)) {
       const stampDataUrl = generateStamp();
-      onSave(stampDataUrl);
+      onSave(stampDataUrl, 'password_stamp');
       setPassword('');
     } else {
       setError('Incorrect password');
@@ -106,21 +99,30 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onClear }) => {
           <div className="border-2 border-dashed border-stone-300 rounded-xl bg-stone-50 overflow-hidden">
             <SignatureCanvas
               ref={sigCanvas}
-              onEnd={handleEnd}
               penColor="black"
               canvasProps={{
                 className: 'w-full h-40 cursor-crosshair',
               }}
             />
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-xs text-stone-500">Sign above</span>
+          <div className="flex justify-between items-center mt-2">
             <button
               type="button"
               onClick={handleClear}
               className="text-sm text-red-600 hover:text-red-800 font-medium"
             >
               Clear Signature
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
+                  onSave(sigCanvas.current.getCanvas().toDataURL('image/png'), 'drawn_signature');
+                }
+              }}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+            >
+              Apply Signature
             </button>
           </div>
         </div>

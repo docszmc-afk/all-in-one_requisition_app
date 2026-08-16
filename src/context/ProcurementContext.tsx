@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 interface ProcurementContextType {
   requests: ProcurementRequest[];
   savedWorkflows: SavedWorkflow[];
+  loading: boolean;
   addRequest: (request: Omit<ProcurementRequest, 'id' | 'createdAt' | 'status'>) => Promise<string>;
   saveDraft: (request: Omit<ProcurementRequest, 'id' | 'createdAt' | 'status'>, existingId?: string) => Promise<void>;
   updateRequest: (id: string, updates: Partial<ProcurementRequest>) => Promise<void>;
@@ -26,6 +27,7 @@ const ProcurementContext = createContext<ProcurementContextType | undefined>(und
 export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [requests, setRequests] = useState<ProcurementRequest[]>([]);
   const [savedWorkflows, setSavedWorkflows] = useState<SavedWorkflow[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchRequests = async () => {
     const { data } = await supabase.from('procurement_requests').select('*');
@@ -47,12 +49,13 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const refreshRequests = async () => {
+    setLoading(true);
     await Promise.all([fetchRequests(), fetchWorkflows()]);
+    setLoading(false);
   };
 
   useEffect(() => {
-    fetchRequests();
-    fetchWorkflows();
+    refreshRequests();
 
     const reqChannel = supabase.channel('public:procurement_requests')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'procurement_requests' }, () => {
@@ -610,6 +613,7 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
     <ProcurementContext.Provider value={{ 
       requests, 
       savedWorkflows, 
+      loading,
       addRequest, 
       saveDraft,
       updateRequest, 
