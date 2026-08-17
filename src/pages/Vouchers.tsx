@@ -49,7 +49,7 @@ export default function Vouchers() {
 
   // Role Checks
   const isCreator = user?.department === 'Facility' || user?.department === 'IT Support';
-  const isApprover = user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com';
+  const isApprover = user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com' || user?.email === 'mdzankli@gmail.com';
   const isAccounts = user?.department === 'Accounts';
   const isAudit = user?.department === 'Audit';
 
@@ -59,7 +59,9 @@ export default function Vouchers() {
                             user?.email === 'zanklihr@gmail.com' || 
                             user?.email === 'auditorzankli@gmail.com' || 
                             user?.email === 'auditor2zankli@gmail.com' || 
-                            user?.email === 'docs.zmc@gmail.com';
+                            user?.email === 'docs.zmc@gmail.com' ||
+                            user?.email === 'chairmanzankli@gmail.com' ||
+                            user?.email === 'mdzankli@gmail.com';
 
   const uniquePayees = Array.from(new Set(vouchers.map(v => v.payee_name))).sort();
   const statuses = ['pending', 'approved', 'rejected', 'sent_back', 'final_payable', 'negotiated'];
@@ -134,6 +136,13 @@ export default function Vouchers() {
         type: 'info',
         link: '/vouchers'
       });
+      addNotification({
+        userId: 'mdzankli@gmail.com',
+        title: 'Pending Voucher',
+        message: `A new payment voucher (${newVoucher.title}) requires your approval.`,
+        type: 'info',
+        link: '/vouchers'
+      });
 
     } catch (error) {
       toast.error('Failed to create voucher');
@@ -178,6 +187,13 @@ export default function Vouchers() {
       });
       addNotification({
         userId: 'docs.zmc@gmail.com',
+        title: 'Pending Voucher',
+        message: `A resubmitted payment voucher (${newVoucher.title}) requires your approval.`,
+        type: 'info',
+        link: '/vouchers'
+      });
+      addNotification({
+        userId: 'mdzankli@gmail.com',
         title: 'Pending Voucher',
         message: `A resubmitted payment voucher (${newVoucher.title}) requires your approval.`,
         type: 'info',

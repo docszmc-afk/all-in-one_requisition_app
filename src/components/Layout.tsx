@@ -17,7 +17,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const notifRef = useRef<HTMLDivElement>(null);
 
-  const isApprover = user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com';
+  const isApprover = user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com' || user?.email === 'mdzankli@gmail.com';
   const isAccounts = user?.department === 'Accounts';
   
   const unattendedApprovalsCount = isApprover ? vouchers.filter(v => v.status === 'pending' && !v.is_queried).length : 0;

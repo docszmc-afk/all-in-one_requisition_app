@@ -46,7 +46,7 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
   const kanbanBadge = kanbanTasks.filter(t => t.status !== 'done').length;
   const itSupportBadge = tickets.filter(t => t.status !== 'Resolved' && t.status !== 'Unfixable').length;
   
-  const isApprover = user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com';
+  const isApprover = user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com' || user?.email === 'mdzankli@gmail.com';
   const isAccounts = user?.department === 'Accounts';
   const vouchersBadge = isApprover 
     ? vouchers.filter(v => v.status === 'pending' && !v.is_queried).length 
@@ -83,7 +83,9 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
                             user?.email === 'zanklihr@gmail.com' || 
                             user?.email === 'auditorzankli@gmail.com' || 
                             user?.email === 'auditor2zankli@gmail.com' || 
-                            user?.email === 'docs.zmc@gmail.com';
+                            user?.email === 'docs.zmc@gmail.com' ||
+                            user?.email === 'chairmanzankli@gmail.com' ||
+                            user?.email === 'mdzankli@gmail.com';
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
