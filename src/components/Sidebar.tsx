@@ -77,6 +77,14 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
     navigate('/login');
   };
 
+  const canAccessVouchers = user?.department === 'Facility' || 
+                            user?.department === 'IT Support' ||
+                            user?.email === 'acct.zankli@gmail.com' || 
+                            user?.email === 'zanklihr@gmail.com' || 
+                            user?.email === 'auditorzankli@gmail.com' || 
+                            user?.email === 'auditor2zankli@gmail.com' || 
+                            user?.email === 'docs.zmc@gmail.com';
+
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     ...(user?.role === 'Creator' || user?.role === 'Both' ? [
@@ -99,7 +107,9 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
     ...(user?.department === 'Accounts' ? [
       { to: '/accounting', icon: Briefcase, label: 'Accounting Suite' }
     ] : []),
-    { to: '/vouchers', icon: List, label: 'Payment Vouchers', badge: vouchersBadge > 0 ? vouchersBadge : undefined },
+    ...(canAccessVouchers ? [
+      { to: '/vouchers', icon: List, label: 'Payment Vouchers', badge: vouchersBadge > 0 ? vouchersBadge : undefined }
+    ] : []),
     { to: '/it-support', icon: Settings, label: 'IT Support', badge: itSupportBadge > 0 ? itSupportBadge : undefined },
     { to: '/email', icon: Mail, label: 'Internal Mail', badge: unreadCount > 0 ? unreadCount : undefined },
   ];

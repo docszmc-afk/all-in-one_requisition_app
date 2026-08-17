@@ -15,6 +15,8 @@ interface TaskContextType {
   archiveBoard: (id: string, isArchived: boolean) => Promise<void>;
   createTask: (task: Partial<KanbanTask>) => Promise<void>;
   updateTaskStatus: (id: string, status: KanbanTask['status']) => Promise<void>;
+  updateTask: (id: string, updates: Partial<KanbanTask>) => Promise<void>;
+  updateBoard: (id: string, title: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   addComment: (taskId: string, content: string) => Promise<void>;
   addAttachment: (taskId: string, file: File) => Promise<void>;
@@ -164,6 +166,30 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateTask = async (id: string, updates: Partial<KanbanTask>) => {
+    try {
+      const { data, error } = await supabase.from('tasks').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+      if (error) throw error;
+      setTasks(tasks.map(t => t.id === id ? data : t));
+      toast.success('Task updated');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update task');
+    }
+  };
+
+  const updateBoard = async (id: string, title: string) => {
+    try {
+      const { data, error } = await supabase.from('task_boards').update({ title }).eq('id', id).select().single();
+      if (error) throw error;
+      setBoards(boards.map(b => b.id === id ? data : b));
+      toast.success('Board title updated');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update board');
+    }
+  };
+
   const deleteTask = async (id: string) => {
     try {
       // Delete associated attachments and comments first to prevent foreign key constraint issues
@@ -235,7 +261,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <TaskContext.Provider value={{
       boards, tasks, comments, attachments, loading, taskSuggestions,
-      createBoard, archiveBoard, createTask, updateTaskStatus, deleteTask, addComment, addAttachment,
+      createBoard, archiveBoard, createTask, updateTaskStatus, updateTask, updateBoard, deleteTask, addComment, addAttachment,
       fetchBoards, fetchTasks
     }}>
       {children}

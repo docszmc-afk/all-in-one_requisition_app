@@ -53,6 +53,14 @@ export default function Vouchers() {
   const isAccounts = user?.department === 'Accounts';
   const isAudit = user?.department === 'Audit';
 
+  const canAccessVouchers = user?.department === 'Facility' || 
+                            user?.department === 'IT Support' ||
+                            user?.email === 'acct.zankli@gmail.com' || 
+                            user?.email === 'zanklihr@gmail.com' || 
+                            user?.email === 'auditorzankli@gmail.com' || 
+                            user?.email === 'auditor2zankli@gmail.com' || 
+                            user?.email === 'docs.zmc@gmail.com';
+
   const uniquePayees = Array.from(new Set(vouchers.map(v => v.payee_name))).sort();
   const statuses = ['pending', 'approved', 'rejected', 'sent_back', 'final_payable', 'negotiated'];
 
@@ -496,6 +504,18 @@ export default function Vouchers() {
 
   if (loading) {
     return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>;
+  }
+
+  if (!canAccessVouchers) {
+    return (
+      <div className="p-8 max-w-2xl mx-auto mt-10">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center shadow-sm">
+          <ShieldAlert className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-red-900 mb-2">Access Denied</h2>
+          <p className="text-red-700">You do not have permission to view or manage Payment Vouchers. Only authorized personnel can access this module.</p>
+        </div>
+      </div>
+    );
   }
 
   return (

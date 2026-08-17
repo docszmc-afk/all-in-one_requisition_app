@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, MOCK_USERS } from '../context/AuthContext';
 import { useProcurement } from '../context/ProcurementContext';
 import { useVendors } from '../context/VendorContext';
@@ -424,7 +424,7 @@ export default function RequestDetails() {
         }
       }
 
-      navigate('/requests');
+      navigate(-1);
     } catch (error) {
       console.error('Error handling action:', error);
       setIsSubmittingAction(false);
@@ -628,6 +628,9 @@ export default function RequestDetails() {
     }
   };
 
+  const location = useLocation();
+  const fromRequestId = location.state?.fromRequestId;
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -635,6 +638,15 @@ export default function RequestDetails() {
       transition={{ duration: 0.4 }}
       className="max-w-4xl mx-auto space-y-6"
     >
+      {fromRequestId && (
+        <button 
+          onClick={() => navigate(`/requests/${fromRequestId}`)}
+          className="mb-2 inline-flex items-center px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+        >
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Return to Original Request
+        </button>
+      )}
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <button 
@@ -707,7 +719,13 @@ export default function RequestDetails() {
                 <p className="text-sm text-blue-700">
                   Found {similarRequests.length} similar past request(s).
                   <button 
-                    onClick={() => setShowSimilarModal(true)} 
+                    onClick={() => {
+                      if (similarRequests.length === 1) {
+                        navigate(`/requests/${similarRequests[0].id}`, { state: { fromRequestId: request.id } });
+                      } else {
+                        navigate('/requests', { state: { fromRequestId: request.id, searchTitle: request.title } });
+                      }
+                    }} 
                     className="font-medium underline ml-2 hover:text-blue-600"
                   >
                     View Details
@@ -737,7 +755,7 @@ export default function RequestDetails() {
                           <p className="text-sm font-medium text-gray-900">{req.title} ({req.id})</p>
                           <p className="text-xs text-gray-500">{safeFormat(req.createdAt, 'MMM d, yyyy')} - {req.createdBy}</p>
                           <p className="text-xs text-gray-500 mt-1">Total: ₦{(req.totalAmount || 0).toLocaleString()}</p>
-                          <button onClick={() => { setShowSimilarModal(false); navigate(`/requests/${req.id}`); }} className="text-xs text-blue-600 hover:underline mt-1">View Request</button>
+                          <button onClick={() => { setShowSimilarModal(false); navigate(`/requests/${req.id}`, { state: { fromRequestId: request.id } }); }} className="text-xs text-blue-600 hover:underline mt-1">View Request</button>
                         </div>
                       ))}
                     </div>

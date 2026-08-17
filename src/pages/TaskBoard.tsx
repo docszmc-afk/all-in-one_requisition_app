@@ -6,7 +6,7 @@ import { Plus, Archive, XCircle, MoreVertical, Paperclip, MessageSquare, Clock, 
 
 export default function TaskBoard() {
   const { user } = useAuth();
-  const { boards, tasks, comments, attachments, loading, taskSuggestions, fetchTasks, createBoard, archiveBoard, createTask, updateTaskStatus, deleteTask, addComment, addAttachment } = useTasks();
+  const { boards, tasks, comments, attachments, loading, taskSuggestions, fetchTasks, createBoard, archiveBoard, createTask, updateTaskStatus, updateTask, updateBoard, deleteTask, addComment, addAttachment } = useTasks();
   
   const [selectedBoardId, setSelectedBoardId] = useState<string>('');
   const [showArchived, setShowArchived] = useState(false);
@@ -15,6 +15,10 @@ export default function TaskBoard() {
   const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
   
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
+  const [editingBoardTitle, setEditingBoardTitle] = useState<string>('');
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState<string>('');
   
   // Board form
   const [newBoard, setNewBoard] = useState({ title: '', start_date: '', end_date: '' });
@@ -161,7 +165,41 @@ export default function TaskBoard() {
       {selectedBoardId && currentBoard ? (
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex justify-between items-center mb-4 shrink-0 px-2">
-            <h2 className="text-lg font-bold text-stone-700">{currentBoard.title}</h2>
+            {editingBoardId === currentBoard.id ? (
+              <input 
+                autoFocus
+                className="text-lg font-bold text-stone-700 bg-white border border-stone-300 rounded px-2 py-1 -ml-2 w-full max-w-sm"
+                value={editingBoardTitle}
+                onChange={e => setEditingBoardTitle(e.target.value)}
+                onBlur={async () => {
+                  if (editingBoardTitle.trim() && editingBoardTitle !== currentBoard.title) {
+                    await updateBoard(currentBoard.id, editingBoardTitle.trim());
+                  }
+                  setEditingBoardId(null);
+                }}
+                onKeyDown={async e => {
+                  if (e.key === 'Enter') {
+                    if (editingBoardTitle.trim() && editingBoardTitle !== currentBoard.title) {
+                      await updateBoard(currentBoard.id, editingBoardTitle.trim());
+                    }
+                    setEditingBoardId(null);
+                  } else if (e.key === 'Escape') {
+                    setEditingBoardId(null);
+                  }
+                }}
+              />
+            ) : (
+              <h2 
+                className="text-lg font-bold text-stone-700 cursor-pointer hover:bg-stone-100 px-2 py-1 -ml-2 rounded transition-colors"
+                onClick={() => {
+                  setEditingBoardTitle(currentBoard.title);
+                  setEditingBoardId(currentBoard.id);
+                }}
+                title="Click to edit board title"
+              >
+                {currentBoard.title}
+              </h2>
+            )}
             {!currentBoard.is_archived && (
               <button 
                 onClick={() => archiveBoard(currentBoard.id, true)}
@@ -314,8 +352,44 @@ export default function TaskBoard() {
         <div className="fixed inset-0 bg-stone-900/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-t-3xl md:rounded-3xl shadow-xl w-full max-w-2xl flex flex-col max-h-[90dvh]">
             <div className="p-5 md:p-6 border-b border-stone-100 flex justify-between items-start">
-              <div>
-                <h2 className="text-2xl font-bold text-stone-800">{selectedTask.title}</h2>
+              <div className="flex-1 mr-4">
+                {editingTaskId === selectedTask.id ? (
+                  <input
+                    autoFocus
+                    className="text-2xl font-bold text-stone-800 bg-white border border-stone-300 rounded px-2 py-1 -ml-2 w-full"
+                    value={editingTaskTitle}
+                    onChange={e => setEditingTaskTitle(e.target.value)}
+                    onBlur={async () => {
+                      if (editingTaskTitle.trim() && editingTaskTitle !== selectedTask.title) {
+                        await updateTask(selectedTask.id, { title: editingTaskTitle.trim() });
+                        setSelectedTask({ ...selectedTask, title: editingTaskTitle.trim() });
+                      }
+                      setEditingTaskId(null);
+                    }}
+                    onKeyDown={async e => {
+                      if (e.key === 'Enter') {
+                        if (editingTaskTitle.trim() && editingTaskTitle !== selectedTask.title) {
+                          await updateTask(selectedTask.id, { title: editingTaskTitle.trim() });
+                          setSelectedTask({ ...selectedTask, title: editingTaskTitle.trim() });
+                        }
+                        setEditingTaskId(null);
+                      } else if (e.key === 'Escape') {
+                        setEditingTaskId(null);
+                      }
+                    }}
+                  />
+                ) : (
+                  <h2 
+                    className="text-2xl font-bold text-stone-800 cursor-pointer hover:bg-stone-50 px-2 py-1 -ml-2 rounded transition-colors"
+                    onClick={() => {
+                      setEditingTaskTitle(selectedTask.title);
+                      setEditingTaskId(selectedTask.id);
+                    }}
+                    title="Click to edit task title"
+                  >
+                    {selectedTask.title}
+                  </h2>
+                )}
                 <div className="text-sm text-stone-500 mt-1 flex items-center">
                   <span className="bg-stone-100 px-2 py-1 rounded text-xs font-semibold mr-2">{selectedTask.status.replace('_', ' ').toUpperCase()}</span>
                   Created by {selectedTask.created_by_email}

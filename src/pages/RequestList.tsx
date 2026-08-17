@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, MOCK_USERS } from '../context/AuthContext';
 import { useProcurement } from '../context/ProcurementContext';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Search, Filter, ChevronRight, ChevronLeft, FileText } from 'lucide-react';
+import { Search, Filter, ChevronRight, ChevronLeft, FileText, RotateCcw } from 'lucide-react';
 
 export default function RequestList() {
   const { user } = useAuth();
   const { requests, loading } = useProcurement();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const initialStatus = searchParams.get('status') || 'All';
-  const [searchTerm, setSearchTerm] = useState('');
+  const fromRequestId = location.state?.fromRequestId;
+  const searchTitle = location.state?.searchTitle;
+  const [searchTerm, setSearchTerm] = useState(searchTitle || '');
   const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
   const [departmentFilter, setDepartmentFilter] = useState<string>('All');
   const [currentPage, setCurrentPage] = useState(1);
@@ -25,6 +29,12 @@ export default function RequestList() {
       setStatusFilter(status);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (searchTitle) {
+      setSearchTerm(searchTitle);
+    }
+  }, [searchTitle]);
 
   if (loading) {
     return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>;
@@ -75,6 +85,15 @@ export default function RequestList() {
 
   return (
     <div className="space-y-6">
+      {fromRequestId && (
+        <button 
+          onClick={() => navigate(`/requests/${fromRequestId}`)}
+          className="mb-2 inline-flex items-center px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+        >
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Return to Original Request
+        </button>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Procurement Requests</h1>
