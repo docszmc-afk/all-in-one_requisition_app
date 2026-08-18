@@ -308,6 +308,14 @@ export interface Voucher {
   account_comments?: string | null;
   is_queried: boolean;
   query_notes?: string | null;
+  post_completion_receipt_url?: string | null;
+  creator_query_response?: string | null;
+}
+
+export interface PaymentVoucherReport {
+  payee_name: string;
+  payment_frequency: number;
+  total_amount_spent: number;
 }
 
 export interface Ticket {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useVouchers } from '../context/VoucherContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -8,17 +8,19 @@ import { toast } from 'sonner';
 import SignaturePad from '../components/SignaturePad';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts';
 import { 
   Plus, Search, Filter, ShieldAlert, FileText, 
   CheckCircle, XCircle, Clock, AlertTriangle, 
   DollarSign, Send, ArrowRight, Paperclip, Download,
-  ChevronLeft, ChevronRight, Edit
+  ChevronLeft, ChevronRight, Edit, Calendar, FileSpreadsheet, BarChart3, Users
 } from 'lucide-react';
 import { Voucher } from '../types';
 
 export default function Vouchers() {
   const { user } = useAuth();
-  const { vouchers, approvals, loading, createVoucher, updateVoucherStatus, queryVoucher, updateVoucherContent, addApproval } = useVouchers();
+  const { vouchers, approvals, loading, createVoucher, updateVoucherStatus, queryVoucher, updateVoucherContent, addApproval, fetchVoucherReport } = useVouchers();
   const { addNotification } = useNotifications();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,9 +32,93 @@ export default function Vouchers() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
-  const [actionModalOpen, setActionModalOpen] = useState<'approve' | 'account' | 'query' | 'details' | null>(null);
+  const [actionModalOpen, setActionModalOpen] = useState<'approve' | 'account' | 'query' | 'details' | 'add_receipt' | 'respond_query' | null>(null);
   const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
   const [signatureType, setSignatureType] = useState<'password_stamp' | 'drawn_signature' | null>(null);
+  const [activeTab, setActiveTab] = useState<'ledger' | 'report'>('ledger');
+  const [reportStartDate, setReportStartDate] = useState('');
+  const [reportEndDate, setReportEndDate] = useState('');
+  const [reportFilterPayee, setReportFilterPayee] = useState('All');
+
+  const { reportData, kpis } = useMemo(() => {
+    let filtered = vouchers.filter(v => ['final_payable', 'approved', 'negotiated'].includes(v.status));
+
+    if (reportStartDate) {
+      filtered = filtered.filter(v => new Date(v.created_at) >= new Date(reportStartDate));
+    }
+    if (reportEndDate) {
+      // Set to end of day
+      const end = new Date(reportEndDate);
+      end.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(v => new Date(v.created_at) <= end);
+    }
+    if (reportFilterPayee !== 'All') {
+      filtered = filtered.filter(v => v.payee_name === reportFilterPayee);
+    }
+
+    const grouped: Record<string, { count: number; total: number }> = {};
+    let totalSpend = 0;
+    
+    filtered.forEach(v => {
+      const amount = v.final_amount || v.amount_requested;
+      if (!grouped[v.payee_name]) grouped[v.payee_name] = { count: 0, total: 0 };
+      grouped[v.payee_name].count += 1;
+      grouped[v.payee_name].total += Number(amount);
+      totalSpend += Number(amount);
+    });
+
+    const data = Object.entries(grouped)
+      .map(([payee_name, stats]) => ({
+        payee_name,
+        payment_frequency: stats.count,
+        total_amount_spent: stats.total
+      }))
+      .sort((a, b) => b.total_amount_spent - a.total_amount_spent); // Sort highest first
+
+    return {
+      reportData: data,
+      kpis: {
+        totalSpend,
+        totalVouchers: filtered.length,
+        avgVoucher: filtered.length ? totalSpend / filtered.length : 0,
+        uniquePayees: Object.keys(grouped).length
+      }
+    };
+  }, [vouchers, reportStartDate, reportEndDate, reportFilterPayee]);
+
+  const reportUniquePayees = useMemo(() => Array.from(new Set(vouchers.map(v => v.payee_name))).sort(), [vouchers]);
+
+  const exportReportCSV = () => {
+    const ws = XLSX.utils.json_to_sheet(reportData.map(row => ({
+      'Payee Name': row.payee_name,
+      'Payment Frequency': row.payment_frequency,
+      'Total Amount Spent (NGN)': row.total_amount_spent
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Voucher Report");
+    XLSX.writeFile(wb, `Voucher_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const exportReportPDF = () => {
+    const doc = new jsPDF();
+    doc.text("Payment Voucher Report", 14, 15);
+    
+    let yPos = 25;
+    if (reportStartDate || reportEndDate) {
+      doc.setFontSize(10);
+      doc.text(`Period: ${reportStartDate || 'Beginning'} to ${reportEndDate || 'Present'}`, 14, yPos);
+      yPos += 5;
+    }
+    
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Payee Name', 'Payment Frequency', 'Total Amount Spent']],
+      body: reportData.map(row => [row.payee_name, row.payment_frequency, row.total_amount_spent.toLocaleString()]),
+      foot: [['Totals', kpis.totalVouchers.toString(), kpis.totalSpend.toLocaleString()]]
+    });
+    
+    doc.save(`Voucher_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
 
   // Form states
   const [newVoucher, setNewVoucher] = useState({
@@ -305,6 +391,41 @@ export default function Vouchers() {
     }
   };
 
+  const handleAddReceipt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVoucher || !fileToUpload) return;
+    setIsUploading(true);
+    try {
+      const receiptUrl = await uploadFile(fileToUpload);
+      await updateVoucherContent(selectedVoucher.id, { post_completion_receipt_url: receiptUrl });
+      toast.success('Receipt added successfully');
+      setActionModalOpen(null);
+      setSelectedVoucher(null);
+      setFileToUpload(null);
+    } catch (error) {
+      toast.error('Failed to upload receipt');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRespondQuery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVoucher) return;
+    try {
+      await updateVoucherContent(selectedVoucher.id, { 
+        creator_query_response: comments,
+        is_queried: false
+      });
+      toast.success('Query response submitted');
+      setActionModalOpen(null);
+      setSelectedVoucher(null);
+      setComments('');
+    } catch (error) {
+      toast.error('Failed to submit response');
+    }
+  };
+
   const handleBulkApprove = async () => {
     if (!user) return;
     try {
@@ -485,6 +606,44 @@ export default function Vouchers() {
            }
         }
       });
+      
+      // Move currentY down past the signatures block
+      currentY += 50; 
+    } else {
+      currentY += 15;
+    }
+
+    // Attachments & Receipts Section
+    if (v.attachment_url || v.post_completion_receipt_url) {
+      if (currentY > 250) {
+        doc.addPage();
+        currentY = 20;
+      }
+      
+      doc.setFontSize(12);
+      doc.setFont('', 'bold');
+      doc.setTextColor(31, 41, 55);
+      doc.text('Attached Documents & Receipts', 14, currentY);
+      
+      currentY += 8;
+      doc.setFontSize(10);
+      doc.setFont('', 'normal');
+      
+      if (v.attachment_url) {
+        doc.setTextColor(107, 114, 128);
+        doc.text('Initial Attachment:', 14, currentY);
+        doc.setTextColor(37, 99, 235); // Blue link
+        doc.textWithLink('View Document', 50, currentY, { url: v.attachment_url });
+        currentY += 8;
+      }
+      
+      if (v.post_completion_receipt_url) {
+        doc.setTextColor(107, 114, 128);
+        doc.text('Final Payment Receipt:', 14, currentY);
+        doc.setTextColor(147, 51, 234); // Purple link
+        doc.textWithLink('View Final Receipt', 55, currentY, { url: v.post_completion_receipt_url });
+        currentY += 8;
+      }
     }
     
     doc.save(`Voucher_${v.id.substring(0,8)}.pdf`);
@@ -544,6 +703,22 @@ export default function Vouchers() {
             Payment Vouchers Ledger
           </h1>
           <p className="text-stone-500 mt-1">Manage and track all facility and IT payment dockets</p>
+          {(isAccounts || isAudit) && (
+            <div className="flex space-x-4 mt-4">
+              <button
+                onClick={() => setActiveTab('ledger')}
+                className={`pb-2 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'ledger' ? 'border-orange-500 text-orange-600' : 'border-transparent text-stone-500 hover:text-stone-700'}`}
+              >
+                Vouchers Ledger
+              </button>
+              <button
+                onClick={() => setActiveTab('report')}
+                className={`pb-2 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'report' ? 'border-orange-500 text-orange-600' : 'border-transparent text-stone-500 hover:text-stone-700'}`}
+              >
+                Payment Voucher Report
+              </button>
+            </div>
+          )}
         </div>
         {isCreator && (
           <button
@@ -560,6 +735,132 @@ export default function Vouchers() {
         )}
       </div>
 
+      {activeTab === 'report' ? (
+        <div className="space-y-6">
+          {/* Filters */}
+          <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 flex flex-col md:flex-row gap-4 items-end">
+            <div className="flex-1 w-full">
+              <label className="block text-xs font-semibold text-stone-500 mb-1.5 uppercase tracking-wider">Start Date</label>
+              <div className="relative">
+                <Calendar className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500 text-sm" />
+              </div>
+            </div>
+            <div className="flex-1 w-full">
+              <label className="block text-xs font-semibold text-stone-500 mb-1.5 uppercase tracking-wider">End Date</label>
+              <div className="relative">
+                <Calendar className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500 text-sm" />
+              </div>
+            </div>
+            <div className="flex-1 w-full">
+              <label className="block text-xs font-semibold text-stone-500 mb-1.5 uppercase tracking-wider">Filter by Payee</label>
+              <div className="relative">
+                <Users className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <select value={reportFilterPayee} onChange={e => setReportFilterPayee(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500 text-sm appearance-none">
+                  <option value="All">All Payees</option>
+                  {reportUniquePayees.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 w-full md:w-auto">
+              <button onClick={exportReportCSV} className="flex-1 md:flex-none px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center">
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> CSV
+              </button>
+              <button onClick={exportReportPDF} className="flex-1 md:flex-none px-4 py-2 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center">
+                <FileText className="w-4 h-4 mr-2" /> PDF
+              </button>
+            </div>
+          </div>
+
+          {/* KPIs */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0"><DollarSign className="w-6 h-6"/></div>
+              <div>
+                <p className="text-sm font-medium text-stone-500">Total Spend</p>
+                <p className="text-2xl font-bold text-stone-800">₦{kpis.totalSpend.toLocaleString()}</p>
+              </div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0"><FileText className="w-6 h-6"/></div>
+              <div>
+                <p className="text-sm font-medium text-stone-500">Total Vouchers</p>
+                <p className="text-2xl font-bold text-stone-800">{kpis.totalVouchers}</p>
+              </div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><BarChart3 className="w-6 h-6"/></div>
+              <div>
+                <p className="text-sm font-medium text-stone-500">Average Voucher</p>
+                <p className="text-2xl font-bold text-stone-800">₦{Math.round(kpis.avgVoucher).toLocaleString()}</p>
+              </div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><Users className="w-6 h-6"/></div>
+              <div>
+                <p className="text-sm font-medium text-stone-500">Unique Payees</p>
+                <p className="text-2xl font-bold text-stone-800">{kpis.uniquePayees}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Chart */}
+            <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-stone-100">
+              <h3 className="text-lg font-bold text-stone-800 mb-6">Top Payees by Volume</h3>
+              <div className="h-72 w-full">
+                {reportData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={reportData.slice(0, 10)} margin={{ top: 0, right: 0, left: 20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
+                      <XAxis dataKey="payee_name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#78716c' }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#78716c' }} tickFormatter={(val) => `₦${(val/1000).toFixed(0)}k`} />
+                      <RechartsTooltip cursor={{ fill: '#fafaf9' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Total Spent']} />
+                      <Bar dataKey="total_amount_spent" radius={[4, 4, 0, 0]}>
+                        {reportData.slice(0, 10).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={index === 0 ? '#f97316' : '#fdba74'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-stone-400">No data for selected filters</div>
+                )}
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden flex flex-col">
+              <div className="p-5 border-b border-stone-100">
+                <h3 className="text-lg font-bold text-stone-800">Payee Breakdown</h3>
+              </div>
+              <div className="overflow-y-auto flex-1 max-h-72">
+                <table className="w-full text-left">
+                  <thead className="bg-stone-50 sticky top-0">
+                    <tr className="text-stone-500 font-semibold text-xs uppercase tracking-wider">
+                      <th className="p-3 pl-5">Payee</th>
+                      <th className="p-3 text-center">Freq</th>
+                      <th className="p-3 pr-5 text-right">Total (₦)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {reportData.length > 0 ? reportData.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-stone-50">
+                        <td className="p-3 pl-5 text-sm font-medium text-stone-800">{row.payee_name}</td>
+                        <td className="p-3 text-sm text-stone-500 text-center">{row.payment_frequency}</td>
+                        <td className="p-3 pr-5 text-sm font-bold text-emerald-600 text-right">{row.total_amount_spent.toLocaleString()}</td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={3} className="p-8 text-center text-stone-400 text-sm">No records found</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden">
         <div className="p-5 border-b border-stone-100 flex flex-col lg:flex-row items-center gap-4 bg-stone-50/80">
           <div className="relative flex-1 w-full">
@@ -725,6 +1026,16 @@ export default function Vouchers() {
                       <ShieldAlert className="w-4 h-4 mr-1.5" /> Query
                     </button>
                   )}
+                  {isCreator && v.is_queried && (
+                    <button onClick={() => { setSelectedVoucher(v); setActionModalOpen('respond_query'); }} className="px-3 py-2 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg text-sm font-semibold transition-colors flex items-center">
+                      <Send className="w-4 h-4 mr-1.5" /> Respond to Query
+                    </button>
+                  )}
+                  {(isAccounts || isCreator) && (v.status === 'final_payable' || v.status === 'negotiated') && (
+                    <button onClick={() => { setSelectedVoucher(v); setActionModalOpen('add_receipt'); }} className="px-3 py-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg text-sm font-semibold transition-colors flex items-center">
+                      <Paperclip className="w-4 h-4 mr-1.5" /> Add Receipt
+                    </button>
+                  )}
                   <button onClick={() => { setSelectedVoucher(v); setActionModalOpen('details'); }} className="px-3 py-2 bg-white border border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-900 rounded-lg text-sm font-medium transition-colors">
                     Details
                   </button>
@@ -772,6 +1083,7 @@ export default function Vouchers() {
           )}
         </div>
       </div>
+      )}
 
       {/* Create Modal */}
       {isCreateModalOpen && (
@@ -899,7 +1211,7 @@ export default function Vouchers() {
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90dvh]">
             <div className={`p-4 md:p-6 border-b flex justify-between items-center shrink-0 ${actionModalOpen === 'query' ? 'bg-red-50 border-red-100' : 'bg-stone-50 border-stone-100'}`}>
               <h2 className={`text-xl font-bold ${actionModalOpen === 'query' ? 'text-red-800' : 'text-stone-800'}`}>
-                {actionModalOpen === 'approve' ? 'Review Voucher' : actionModalOpen === 'account' ? 'Process Payment' : actionModalOpen === 'details' ? 'Voucher Details' : 'Query Voucher'}
+                {actionModalOpen === 'approve' ? 'Review Voucher' : actionModalOpen === 'account' ? 'Process Payment' : actionModalOpen === 'details' ? 'Voucher Details' : actionModalOpen === 'add_receipt' ? 'Add Receipt' : actionModalOpen === 'respond_query' ? 'Respond to Query' : 'Query Voucher'}
               </h2>
               <button onClick={() => { setActionModalOpen(null); setComments(''); }} className="p-2 text-stone-400 hover:text-stone-600 hover:bg-white rounded-full transition-colors"><XCircle className="w-6 h-6"/></button>
             </div>
@@ -937,6 +1249,17 @@ export default function Vouchers() {
                   </div>
                 )}
                 
+                {selectedVoucher.post_completion_receipt_url && (
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">Final Payment Receipt</h3>
+                    <a href={selectedVoucher.post_completion_receipt_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center px-5 py-3 bg-white border border-purple-200 text-purple-700 rounded-xl hover:bg-purple-50 hover:border-purple-300 transition-all text-sm font-semibold shadow-sm w-full group">
+                      <Paperclip className="w-5 h-5 mr-3 text-purple-400 group-hover:text-purple-600 transition-colors" />
+                      View Final Receipt
+                      <ArrowRight className="w-4 h-4 ml-auto text-purple-400" />
+                    </a>
+                  </div>
+                )}
+                
                 {/* Comments Section */}
                 <div className="space-y-3 pt-2">
                   {selectedVoucher.approver_comments && (
@@ -955,6 +1278,12 @@ export default function Vouchers() {
                     <div>
                       <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">Audit Query Notes</h3>
                       <p className="text-sm text-red-800 bg-red-50/50 p-3.5 rounded-xl border border-red-100">{selectedVoucher.query_notes}</p>
+                    </div>
+                  )}
+                  {selectedVoucher.creator_query_response && (
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">Creator Response to Query</h3>
+                      <p className="text-sm text-orange-800 bg-orange-50/50 p-3.5 rounded-xl border border-orange-100">{selectedVoucher.creator_query_response}</p>
                     </div>
                   )}
                 </div>
@@ -994,19 +1323,29 @@ export default function Vouchers() {
                   )}
                 </div>
               )}
-              {actionModalOpen !== 'details' && (
+              {actionModalOpen === 'add_receipt' && (
+                <div>
+                  <label className="block text-sm font-semibold text-stone-700 mb-1.5">Upload Receipt Document</label>
+                  <p className="text-xs text-stone-500 mb-2">Upload the final receipt after the payment has been completed.</p>
+                  <div className="flex items-center">
+                    <input type="file" onChange={(e) => setFileToUpload(e.target.files?.[0] || null)} className="w-full text-sm text-stone-500 file:mr-4 file:py-2.5 file:px-5 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 transition-colors cursor-pointer" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" />
+                  </div>
+                </div>
+              )}
+              
+              {actionModalOpen !== 'details' && actionModalOpen !== 'add_receipt' && (
                 <div>
                   <div className="flex justify-between items-end mb-1.5">
                     <label className="block text-sm font-semibold text-stone-700">
-                      {actionModalOpen === 'query' ? 'Query Notes (Required)' : actionModalOpen === 'approve' ? 'Reason for Rejection/Send Back' : 'Comments / Remarks'}
+                      {actionModalOpen === 'query' ? 'Query Notes (Required)' : actionModalOpen === 'respond_query' ? 'Response to Query (Required)' : actionModalOpen === 'approve' ? 'Reason for Rejection/Send Back' : 'Comments / Remarks'}
                     </label>
-                    {actionModalOpen !== 'query' && <span className="text-xs text-stone-400">Optional for Approvals</span>}
+                    {actionModalOpen !== 'query' && actionModalOpen !== 'respond_query' && <span className="text-xs text-stone-400">Optional for Approvals</span>}
                   </div>
                   <textarea 
                     value={comments} 
                     onChange={e => setComments(e.target.value)} 
-                    className={`w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 transition-colors h-28 resize-none ${actionModalOpen === 'query' ? 'focus:ring-red-500 focus:border-red-500' : 'focus:ring-orange-500 focus:border-orange-500'}`} 
-                    placeholder={actionModalOpen === 'query' ? 'Explain exactly what is wrong and what needs fixing...' : 'Add any internal notes for accounts or creator...'}
+                    className={`w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 transition-colors h-28 resize-none ${actionModalOpen === 'query' || actionModalOpen === 'respond_query' ? 'focus:ring-red-500 focus:border-red-500' : 'focus:ring-orange-500 focus:border-orange-500'}`} 
+                    placeholder={actionModalOpen === 'query' ? 'Explain exactly what is wrong and what needs fixing...' : actionModalOpen === 'respond_query' ? 'Provide your response to the audit query...' : 'Add any internal notes for accounts or creator...'}
                   />
                   {actionModalOpen === 'approve' && (
                     <p className="text-xs text-stone-500 mt-2">If rejecting or sending back, you MUST provide a reason above.</p>
@@ -1047,6 +1386,20 @@ export default function Vouchers() {
               {actionModalOpen === 'query' && (
                 <button onClick={handleQuery} disabled={!comments.trim()} className="px-8 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 font-semibold transition-colors shadow-md flex items-center">
                   <Send className="w-4 h-4 mr-2" /> Submit Query
+                </button>
+              )}
+              {actionModalOpen === 'respond_query' && (
+                <button onClick={handleRespondQuery} disabled={!comments.trim()} className="px-8 py-2.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-50 font-semibold transition-colors shadow-md flex items-center">
+                  <Send className="w-4 h-4 mr-2" /> Send Response
+                </button>
+              )}
+              {actionModalOpen === 'add_receipt' && (
+                <button onClick={handleAddReceipt} disabled={!fileToUpload || isUploading} className="px-8 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 font-semibold transition-colors shadow-md flex items-center">
+                  {isUploading ? (
+                    <><span className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full mr-2"></span> Uploading...</>
+                  ) : (
+                    <><Paperclip className="w-4 h-4 mr-2" /> Add Receipt</>
+                  )}
                 </button>
               )}
             </div>

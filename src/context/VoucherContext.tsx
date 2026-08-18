@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Voucher, VoucherApproval } from '../types';
+import { Voucher, VoucherApproval, PaymentVoucherReport } from '../types';
 import { toast } from 'sonner';
 
 interface VoucherContextType {
@@ -14,6 +14,7 @@ interface VoucherContextType {
   updateVoucherContent: (id: string, updates: Partial<Voucher>) => Promise<void>;
   addApproval: (approval: Partial<VoucherApproval>) => Promise<void>;
   fetchApprovals: () => Promise<void>;
+  fetchVoucherReport: () => Promise<PaymentVoucherReport[]>;
 }
 
 const VoucherContext = createContext<VoucherContextType | undefined>(undefined);
@@ -174,8 +175,21 @@ export const VoucherProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const fetchVoucherReport = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('payment_voucher_report')
+        .select('*');
+      if (error) throw error;
+      return data as PaymentVoucherReport[];
+    } catch (error) {
+      console.error('Error fetching voucher report:', error);
+      return [];
+    }
+  };
+
   return (
-    <VoucherContext.Provider value={{ vouchers, approvals, loading, createVoucher, updateVoucherStatus, queryVoucher, fetchVouchers, updateVoucherContent, fetchApprovals, addApproval }}>
+    <VoucherContext.Provider value={{ vouchers, approvals, loading, createVoucher, updateVoucherStatus, queryVoucher, fetchVouchers, updateVoucherContent, fetchApprovals, addApproval, fetchVoucherReport }}>
       {children}
     </VoucherContext.Provider>
   );
