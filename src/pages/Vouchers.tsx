@@ -48,14 +48,15 @@ export default function Vouchers() {
   const itemsPerPage = 30;
 
   // Role Checks
-  const isCreator = user?.department === 'Facility' || user?.department === 'IT Support';
+  const isVoucherOnlyUser = user?.email === 'niyi01@zankli.com' || user?.email === 'promise@zankli.com';
+  const isCreator = user?.department === 'Facility' || user?.department === 'IT Support' || isVoucherOnlyUser;
   const isApprover = user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com' || user?.email === 'mdzankli@gmail.com';
-  const isAccounts = user?.department === 'Accounts';
+  const isAccounts = user?.department === 'Accounts' && !isVoucherOnlyUser;
   const isAudit = user?.department === 'Audit';
 
   const canAccessVouchers = user?.department === 'Facility' || 
                             user?.department === 'IT Support' ||
-                            user?.email === 'acct.zankli@gmail.com' || 
+                            user?.department === 'Accounts' ||
                             user?.email === 'zanklihr@gmail.com' || 
                             user?.email === 'auditorzankli@gmail.com' || 
                             user?.email === 'auditor2zankli@gmail.com' || 

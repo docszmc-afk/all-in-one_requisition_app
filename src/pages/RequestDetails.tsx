@@ -219,7 +219,7 @@ export default function RequestDetails() {
   
   const isAuditEditing = (canApproveDynamic && user?.department === 'Audit') || canApproveAudit;
 
-  const eligibleInspectionTypes = ['Diesel Request', 'Equipment Request', 'Lab Purchase Order', 'Product Procurement', 'Store Requisition', 'Pharmacy Purchase Order', 'IT Procurement'];
+  const eligibleInspectionTypes = ['Diesel Request', 'Equipment Request', 'Lab Purchase Order', 'Product Procurement', 'Store Requisition', 'Pharmacy Purchase Order', 'IT Procurement', 'Emergency Drug Purchase (1 month)', 'Emergency Drug Purchase (1 week)', 'Daily Purchase', 'Issue From Store', 'General'];
   const isInspectionEligible = eligibleInspectionTypes.includes(request?.requestType || '');
   const canInspect = request?.status === 'Approved' && (isAudit1 || isAudit2 || isGenericAudit);
 

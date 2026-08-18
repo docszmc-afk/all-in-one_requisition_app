@@ -17,9 +17,10 @@ export default function FacilityRequests() {
   const [newRequest, setNewRequest] = useState({ title: '', description: '' });
 
   const isFacilityAdmin = user?.department === 'Facility';
+  const isVoucherOnlyUser = user?.email === 'niyi01@zankli.com' || user?.email === 'promise@zankli.com';
   
-  // Approvers see their own requests, Facility Admin sees all
-  const visibleRequests = isFacilityAdmin 
+  // Approvers see their own requests, Facility Admin and read-only users see all
+  const visibleRequests = (isFacilityAdmin || isVoucherOnlyUser)
     ? facilityRequests 
     : facilityRequests.filter(req => req.requestedBy === user?.email);
 
@@ -99,16 +100,18 @@ export default function FacilityRequests() {
         <div>
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Facility Requests</h1>
           <p className="text-sm text-stone-500 mt-1">
-            {isFacilityAdmin ? 'Manage internal requests from staff, or submit your own.' : 'Submit requests for office supplies or maintenance.'}
+            {isFacilityAdmin ? 'Manage internal requests from staff, or submit your own.' : isVoucherOnlyUser ? 'Read-only view of facility requests.' : 'Submit requests for office supplies or maintenance.'}
           </p>
         </div>
-        <button
-          onClick={() => setIsAdding(!isAdding)}
-          className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          New Request
-        </button>
+        {!isVoucherOnlyUser && (
+          <button
+            onClick={() => setIsAdding(!isAdding)}
+            className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New Request
+          </button>
+        )}
       </div>
 
       {isAdding && (

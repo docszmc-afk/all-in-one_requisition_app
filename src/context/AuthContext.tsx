@@ -37,6 +37,8 @@ export const MOCK_USERS = [
   { id: '24', email: 'ben@zankli.com', password: 'beak1012', department: 'IT Support', role: 'Both' },
   { id: '25', email: 'emekao@zankli.com', password: 'mekuslalalol', department: 'IT Support', role: 'Both' },
   { id: '26', email: 'mathew@zankli.com', password: 'ademat232', department: 'IT Support', role: 'Both' },
+  { id: '27', email: 'niyi01@zankli.com', password: 'niyibaba1', department: 'Accounts', role: 'Creator' },
+  { id: '28', email: 'promise@zankli.com', password: '1promise12', department: 'Accounts', role: 'Creator' },
 ];
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

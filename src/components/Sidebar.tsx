@@ -87,32 +87,41 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
                             user?.email === 'chairmanzankli@gmail.com' ||
                             user?.email === 'mdzankli@gmail.com';
 
+  const isVoucherOnlyUser = user?.email === 'niyi01@zankli.com' || user?.email === 'promise@zankli.com';
+
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    ...(user?.role === 'Creator' || user?.role === 'Both' ? [
+    ...(!isVoucherOnlyUser && (user?.role === 'Creator' || user?.role === 'Both') ? [
       { to: '/requests/new', icon: FilePlus, label: 'New Request' }
     ] : []),
-    { to: '/requests', icon: List, label: 'All Requests' },
-    ...(user?.role === 'Approver' || user?.role === 'Both' || user?.department === 'Facility' ? [
+    ...(!isVoucherOnlyUser ? [
+      { to: '/requests', icon: List, label: 'All Requests' }
+    ] : []),
+    ...(!isVoucherOnlyUser && (user?.role === 'Approver' || user?.role === 'Both' || user?.department === 'Facility') ? [
       { to: '/facility-requests', icon: FilePlus, label: 'Facility Requests', badge: facilityRequestBadge > 0 ? facilityRequestBadge : undefined }
     ] : []),
-    ...(user?.department === 'Facility' || user?.department === 'Laboratory' || user?.department === 'Pharmacy' ? [
+    ...(isVoucherOnlyUser ? [
+      { to: '/facility-requests', icon: FilePlus, label: 'Facility Requests (Read-Only)' }
+    ] : []),
+    ...(!isVoucherOnlyUser && (user?.department === 'Facility' || user?.department === 'Laboratory' || user?.department === 'Pharmacy') ? [
       { to: '/vendors', icon: Users, label: 'Vendors' }
     ] : []),
-    ...(user?.department === 'Facility' ? [
+    ...(!isVoucherOnlyUser && user?.department === 'Facility' ? [
       { to: '/inventory', icon: Package, label: 'Store Management' }
     ] : []),
-    ...(user?.department === 'Facility' || user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com' ? [
+    ...(!isVoucherOnlyUser && (user?.department === 'Facility' || user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com') ? [
       { to: '/workspace', icon: Briefcase, label: 'Facility Workspace', badge: workspaceBadge > 0 ? workspaceBadge : undefined },
       { to: '/task-boards', icon: List, label: 'Task Management', badge: kanbanBadge > 0 ? kanbanBadge : undefined }
     ] : []),
-    ...(user?.department === 'Accounts' ? [
+    ...(!isVoucherOnlyUser && user?.department === 'Accounts' ? [
       { to: '/accounting', icon: Briefcase, label: 'Accounting Suite' }
     ] : []),
-    ...(canAccessVouchers ? [
+    ...(canAccessVouchers || isVoucherOnlyUser ? [
       { to: '/vouchers', icon: List, label: 'Payment Vouchers', badge: vouchersBadge > 0 ? vouchersBadge : undefined }
     ] : []),
-    { to: '/it-support', icon: Settings, label: 'IT Support', badge: itSupportBadge > 0 ? itSupportBadge : undefined },
+    ...(!isVoucherOnlyUser ? [
+      { to: '/it-support', icon: Settings, label: 'IT Support', badge: itSupportBadge > 0 ? itSupportBadge : undefined }
+    ] : []),
     { to: '/email', icon: Mail, label: 'Internal Mail', badge: unreadCount > 0 ? unreadCount : undefined },
   ];
 

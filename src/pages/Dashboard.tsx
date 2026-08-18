@@ -91,7 +91,9 @@ export default function Dashboard() {
     return data;
   }, [requests]);
 
-  const userRequests = user?.role === 'Creator' 
+  const isVoucherOnlyUser = user?.email === 'niyi01@zankli.com' || user?.email === 'promise@zankli.com';
+
+  const userRequests = isVoucherOnlyUser ? [] : user?.role === 'Creator' 
     ? requests.filter(r => r.department === user.department)
     : user?.role === 'Both'
     ? requests.filter(r => r.department === user.department || (r.workflow && r.workflow.includes(user.id)))
@@ -164,7 +166,7 @@ export default function Dashboard() {
     
     return requests.filter(r => {
       if (r.status !== 'Approved') return false;
-      const eligibleTypes = ['Diesel Request', 'Equipment Request', 'Lab Purchase Order', 'Product Procurement', 'Store Requisition', 'Pharmacy Purchase Order', 'IT Procurement'];
+      const eligibleTypes = ['Diesel Request', 'Equipment Request', 'Lab Purchase Order', 'Product Procurement', 'Store Requisition', 'Pharmacy Purchase Order', 'IT Procurement', 'Emergency Drug Purchase (1 month)', 'Emergency Drug Purchase (1 week)', 'Daily Purchase', 'Issue From Store', 'General'];
       if (!eligibleTypes.includes(r.requestType || '')) return false;
 
       const approvalDate = r.approvals?.length ? r.approvals[r.approvals.length - 1].date : r.createdAt;
@@ -172,7 +174,10 @@ export default function Dashboard() {
       if (daysSinceApproval < 7) return false;
 
       if (r.items && r.items.length > 0) {
-        return r.items.some(item => !item.isInspected);
+        // If the request itself is marked as inspected, consider it done regardless of individual items
+        if (r.isInspected) return false;
+        // Otherwise, it is overdue
+        return true;
       } else {
         return !r.isInspected;
       }
@@ -201,6 +206,31 @@ export default function Dashboard() {
 
   if (loading) {
     return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>;
+  }
+
+  if (isVoucherOnlyUser) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
+            Welcome back, {user?.email?.split('@')[0] || 'User'}
+          </h1>
+          <p className="text-sm text-stone-500 mt-1">
+            Access your Payment Vouchers, Facility Requests, and Internal Mail from the sidebar.
+          </p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-8 text-center">
+           <FileText className="w-12 h-12 text-stone-300 mx-auto mb-4" />
+           <h2 className="text-lg font-medium text-stone-900">Payment Vouchers Portal</h2>
+           <p className="text-stone-500 mt-2 max-w-md mx-auto">
+             Navigate to the Payment Vouchers tab to raise and track your vouchers.
+           </p>
+           <Link to="/vouchers" className="mt-6 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700">
+             Go to Payment Vouchers
+           </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -243,7 +273,7 @@ export default function Dashboard() {
           >
             <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin text-orange-500' : 'text-stone-500'}`} />
           </button>
-          {(user?.role === 'Creator' || user?.role === 'Both') && (
+          {!isVoucherOnlyUser && (user?.role === 'Creator' || user?.role === 'Both') && (
             <Link
               to="/requests/new"
               className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
