@@ -146,6 +146,7 @@ export default function Vouchers() {
                             user?.email === 'zanklihr@gmail.com' || 
                             user?.email === 'auditorzankli@gmail.com' || 
                             user?.email === 'auditor2zankli@gmail.com' || 
+                            user?.email === 'auditorzankli3@gmail.com' || 
                             user?.email === 'docs.zmc@gmail.com' ||
                             user?.email === 'chairmanzankli@gmail.com' ||
                             user?.email === 'mdzankli@gmail.com';
@@ -494,14 +495,25 @@ export default function Vouchers() {
     doc.setFillColor(249, 250, 251);
     doc.rect(0, 0, 210, 40, 'F');
     
-    doc.setFontSize(22);
-    doc.setTextColor(31, 41, 55);
-    doc.text('PAYMENT VOUCHER', 105, 20, { align: 'center' });
+    doc.setFontSize(20);
+    doc.setTextColor(17, 24, 39);
+    doc.setFont('', 'bold');
+    doc.text('ZANKLI MEDICAL SERVICES', 105, 14, { align: 'center' });
     
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setTextColor(107, 114, 128);
-    doc.text(`Voucher ID: ${v.id.substring(0, 8).toUpperCase()}`, 105, 28, { align: 'center' });
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 105, 33, { align: 'center' });
+    doc.setFont('', 'normal');
+    doc.text('No 1 Ibrahim Tahir Lane, Utako, Abuja, FCT, Nigeria', 105, 19, { align: 'center' });
+    
+    doc.setFontSize(14);
+    doc.setTextColor(31, 41, 55);
+    doc.setFont('', 'bold');
+    doc.text('PAYMENT VOUCHER', 105, 28, { align: 'center' });
+    
+    doc.setFontSize(9);
+    doc.setTextColor(107, 114, 128);
+    doc.setFont('', 'normal');
+    doc.text(`Voucher ID: ${v.id.substring(0, 8).toUpperCase()}  |  Generated: ${new Date().toLocaleDateString()}`, 105, 34, { align: 'center' });
 
     // Details Box
     doc.setDrawColor(209, 213, 219);
@@ -564,7 +576,18 @@ export default function Vouchers() {
     }
 
     // Approvals Section
-    const aps = approvals.filter(a => a.voucher_id === v.id);
+    const allAps = approvals.filter(a => a.voucher_id === v.id);
+    
+    // Deduplicate approvals by user_email to prevent repeats
+    const uniqueApsMap = new Map<string, typeof allAps[0]>();
+    const sortedAps = [...allAps].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    
+    sortedAps.forEach(ap => {
+      uniqueApsMap.set(ap.user_email, ap);
+    });
+    
+    const aps = Array.from(uniqueApsMap.values());
+
     if (aps.length > 0) {
       doc.setFontSize(12);
       doc.setFont('', 'bold');
@@ -600,7 +623,7 @@ export default function Vouchers() {
         // Add signature image
         if (ap.signature_data) {
            try {
-             doc.addImage(ap.signature_data, 'PNG', xPos + 5, currentY + 22, 40, 15);
+             doc.addImage(ap.signature_data, 'PNG', xPos + 5, currentY + 22, 40, 15, ap.id);
            } catch(e) {
              doc.text('[Signature]', xPos + 5, currentY + 30);
            }

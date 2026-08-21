@@ -83,6 +83,7 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
                             user?.email === 'zanklihr@gmail.com' || 
                             user?.email === 'auditorzankli@gmail.com' || 
                             user?.email === 'auditor2zankli@gmail.com' || 
+                            user?.email === 'auditorzankli3@gmail.com' || 
                             user?.email === 'docs.zmc@gmail.com' ||
                             user?.email === 'chairmanzankli@gmail.com' ||
                             user?.email === 'mdzankli@gmail.com';
