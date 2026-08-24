@@ -135,7 +135,8 @@ export default function Vouchers() {
 
   // Role Checks
   const isVoucherOnlyUser = user?.email === 'niyi01@zankli.com' || user?.email === 'promise@zankli.com';
-  const isCreator = user?.department === 'Facility' || user?.department === 'IT Support' || isVoucherOnlyUser;
+  const isLabVoucherCreator = user?.email === 'labzankli@gmail.com';
+  const isCreator = user?.department === 'Facility' || user?.department === 'IT Support' || isVoucherOnlyUser || isLabVoucherCreator;
   const isApprover = user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com' || user?.email === 'mdzankli@gmail.com';
   const isAccounts = user?.department === 'Accounts' && !isVoucherOnlyUser;
   const isAudit = user?.department === 'Audit';
@@ -149,12 +150,18 @@ export default function Vouchers() {
                             user?.email === 'auditorzankli3@gmail.com' || 
                             user?.email === 'docs.zmc@gmail.com' ||
                             user?.email === 'chairmanzankli@gmail.com' ||
-                            user?.email === 'mdzankli@gmail.com';
+                            user?.email === 'mdzankli@gmail.com' ||
+                            isLabVoucherCreator;
 
   const uniquePayees = Array.from(new Set(vouchers.map(v => v.payee_name))).sort();
   const statuses = ['pending', 'approved', 'rejected', 'sent_back', 'final_payable', 'negotiated'];
 
   const filteredVouchers = vouchers.filter(v => {
+    // If the user is specifically labzankli@gmail.com, only show their own vouchers
+    if (isLabVoucherCreator && v.creator_email !== 'labzankli@gmail.com') {
+      return false;
+    }
+
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = v.title.toLowerCase().includes(searchLower) ||
            v.payee_name.toLowerCase().includes(searchLower) ||
