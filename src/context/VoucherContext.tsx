@@ -145,7 +145,7 @@ export const VoucherProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const { data, error } = await supabase
         .from('vouchers')
-        .update({ is_queried: true, query_notes: queryNotes })
+        .update({ is_queried: true, query_notes: queryNotes, query_responded: false, creator_query_response: null })
         .eq('id', id)
         .select()
         .single();

@@ -1,0 +1,1 @@
+ALTER TABLE public.vouchers ADD COLUMN IF NOT EXISTS query_responded BOOLEAN DEFAULT FALSE;

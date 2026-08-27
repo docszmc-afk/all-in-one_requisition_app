@@ -78,6 +78,7 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
   };
 
   const isLabVoucherCreator = user?.email === 'labzankli@gmail.com';
+  const isStoreVoucherCreator = user?.email === 'storezankli@gmail.com';
   const canAccessVouchers = user?.department === 'Facility' || 
                             user?.department === 'IT Support' ||
                             user?.email === 'acct.zankli@gmail.com' || 
@@ -88,7 +89,8 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
                             user?.email === 'docs.zmc@gmail.com' ||
                             user?.email === 'chairmanzankli@gmail.com' ||
                             user?.email === 'mdzankli@gmail.com' ||
-                            isLabVoucherCreator;
+                            isLabVoucherCreator ||
+                            isStoreVoucherCreator;
 
   const isVoucherOnlyUser = user?.email === 'niyi01@zankli.com' || user?.email === 'promise@zankli.com';
 

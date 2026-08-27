@@ -32,7 +32,7 @@ export default function Vouchers() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
-  const [actionModalOpen, setActionModalOpen] = useState<'approve' | 'account' | 'query' | 'details' | 'add_receipt' | 'respond_query' | null>(null);
+  const [actionModalOpen, setActionModalOpen] = useState<'approve' | 'account' | 'query' | 'details' | 'add_receipt' | 'respond_query' | 'review_query' | null>(null);
   const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
   const [signatureType, setSignatureType] = useState<'password_stamp' | 'drawn_signature' | null>(null);
   const [activeTab, setActiveTab] = useState<'ledger' | 'report'>('ledger');
@@ -136,7 +136,8 @@ export default function Vouchers() {
   // Role Checks
   const isVoucherOnlyUser = user?.email === 'niyi01@zankli.com' || user?.email === 'promise@zankli.com';
   const isLabVoucherCreator = user?.email === 'labzankli@gmail.com';
-  const isCreator = user?.department === 'Facility' || user?.department === 'IT Support' || isVoucherOnlyUser || isLabVoucherCreator;
+  const isStoreVoucherCreator = user?.email === 'storezankli@gmail.com';
+  const isCreator = user?.department === 'Facility' || user?.department === 'IT Support' || isVoucherOnlyUser || isLabVoucherCreator || isStoreVoucherCreator;
   const isApprover = user?.email === 'zanklihr@gmail.com' || user?.email === 'docs.zmc@gmail.com' || user?.email === 'mdzankli@gmail.com';
   const isAccounts = user?.department === 'Accounts' && !isVoucherOnlyUser;
   const isAudit = user?.department === 'Audit';
@@ -151,14 +152,15 @@ export default function Vouchers() {
                             user?.email === 'docs.zmc@gmail.com' ||
                             user?.email === 'chairmanzankli@gmail.com' ||
                             user?.email === 'mdzankli@gmail.com' ||
-                            isLabVoucherCreator;
+                            isLabVoucherCreator ||
+                            isStoreVoucherCreator;
 
   const uniquePayees = Array.from(new Set(vouchers.map(v => v.payee_name))).sort();
   const statuses = ['pending', 'approved', 'rejected', 'sent_back', 'final_payable', 'negotiated'];
 
   const filteredVouchers = vouchers.filter(v => {
-    // If the user is specifically labzankli@gmail.com, only show their own vouchers
-    if (isLabVoucherCreator && v.creator_email !== 'labzankli@gmail.com') {
+    // If the user is specifically labzankli@gmail.com or storezankli@gmail.com, only show their own vouchers
+    if ((isLabVoucherCreator || isStoreVoucherCreator) && v.creator_email !== user?.email) {
       return false;
     }
 
@@ -423,14 +425,63 @@ export default function Vouchers() {
     try {
       await updateVoucherContent(selectedVoucher.id, { 
         creator_query_response: comments,
-        is_queried: false
+        query_responded: true
       });
+      
+      addNotification({
+        userId: 'Audit',
+        title: 'Voucher Query Responded',
+        message: `${user?.email} responded to query for voucher: ${selectedVoucher.title}`,
+        type: 'info',
+        link: `/vouchers`
+      });
+
       toast.success('Query response submitted');
       setActionModalOpen(null);
       setSelectedVoucher(null);
       setComments('');
     } catch (error) {
       toast.error('Failed to submit response');
+    }
+  };
+
+  const handleReviewQuery = async (status: 'Satisfied' | 'Dissatisfied') => {
+    if (!selectedVoucher) return;
+    if (status === 'Dissatisfied' && !comments.trim()) {
+      toast.error('Please provide a reason for dissatisfaction');
+      return;
+    }
+    
+    try {
+      if (status === 'Satisfied') {
+        await updateVoucherContent(selectedVoucher.id, { 
+          is_queried: false, 
+          query_responded: false, 
+          query_notes: null, 
+          creator_query_response: null 
+        });
+        toast.success('Query marked as satisfied and resolved');
+      } else {
+        await updateVoucherContent(selectedVoucher.id, { 
+          query_responded: false, 
+          query_notes: comments, 
+          creator_query_response: null 
+        });
+        toast.success('New query sent to creator');
+        
+        addNotification({
+          userId: selectedVoucher.creator_email,
+          title: 'Voucher Query Returned',
+          message: `Audit was dissatisfied with your response for voucher: ${selectedVoucher.title}`,
+          type: 'error',
+          link: `/vouchers`
+        });
+      }
+      setActionModalOpen(null);
+      setSelectedVoucher(null);
+      setComments('');
+    } catch (error) {
+      toast.error('Failed to process review');
     }
   };
 
@@ -1056,7 +1107,12 @@ export default function Vouchers() {
                       <ShieldAlert className="w-4 h-4 mr-1.5" /> Query
                     </button>
                   )}
-                  {isCreator && v.is_queried && (
+                  {isAudit && v.is_queried && v.query_responded && (
+                    <button onClick={() => { setSelectedVoucher(v); setActionModalOpen('review_query'); }} className="px-3 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm font-semibold transition-colors flex items-center">
+                      <ShieldAlert className="w-4 h-4 mr-1.5" /> Review Query Response
+                    </button>
+                  )}
+                  {isCreator && v.is_queried && !v.query_responded && (
                     <button onClick={() => { setSelectedVoucher(v); setActionModalOpen('respond_query'); }} className="px-3 py-2 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg text-sm font-semibold transition-colors flex items-center">
                       <Send className="w-4 h-4 mr-1.5" /> Respond to Query
                     </button>
@@ -1240,8 +1296,8 @@ export default function Vouchers() {
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90dvh]">
             <div className={`p-4 md:p-6 border-b flex justify-between items-center shrink-0 ${actionModalOpen === 'query' ? 'bg-red-50 border-red-100' : 'bg-stone-50 border-stone-100'}`}>
-              <h2 className={`text-xl font-bold ${actionModalOpen === 'query' ? 'text-red-800' : 'text-stone-800'}`}>
-                {actionModalOpen === 'approve' ? 'Review Voucher' : actionModalOpen === 'account' ? 'Process Payment' : actionModalOpen === 'details' ? 'Voucher Details' : actionModalOpen === 'add_receipt' ? 'Add Receipt' : actionModalOpen === 'respond_query' ? 'Respond to Query' : 'Query Voucher'}
+              <h2 className={`text-xl font-bold ${(actionModalOpen === 'query' || actionModalOpen === 'review_query') ? 'text-red-800' : 'text-stone-800'}`}>
+                {actionModalOpen === 'approve' ? 'Review Voucher' : actionModalOpen === 'account' ? 'Process Payment' : actionModalOpen === 'details' ? 'Voucher Details' : actionModalOpen === 'add_receipt' ? 'Add Receipt' : actionModalOpen === 'respond_query' ? 'Respond to Query' : actionModalOpen === 'review_query' ? 'Review Query Response' : 'Query Voucher'}
               </h2>
               <button onClick={() => { setActionModalOpen(null); setComments(''); }} className="p-2 text-stone-400 hover:text-stone-600 hover:bg-white rounded-full transition-colors"><XCircle className="w-6 h-6"/></button>
             </div>
@@ -1367,15 +1423,15 @@ export default function Vouchers() {
                 <div>
                   <div className="flex justify-between items-end mb-1.5">
                     <label className="block text-sm font-semibold text-stone-700">
-                      {actionModalOpen === 'query' ? 'Query Notes (Required)' : actionModalOpen === 'respond_query' ? 'Response to Query (Required)' : actionModalOpen === 'approve' ? 'Reason for Rejection/Send Back' : 'Comments / Remarks'}
+                      {actionModalOpen === 'query' ? 'Query Notes (Required)' : actionModalOpen === 'respond_query' ? 'Response to Query (Required)' : actionModalOpen === 'review_query' ? 'Reason for Dissatisfaction (Required if dissatisfied)' : actionModalOpen === 'approve' ? 'Reason for Rejection/Send Back' : 'Comments / Remarks'}
                     </label>
-                    {actionModalOpen !== 'query' && actionModalOpen !== 'respond_query' && <span className="text-xs text-stone-400">Optional for Approvals</span>}
+                    {actionModalOpen !== 'query' && actionModalOpen !== 'respond_query' && actionModalOpen !== 'review_query' && <span className="text-xs text-stone-400">Optional for Approvals</span>}
                   </div>
                   <textarea 
                     value={comments} 
                     onChange={e => setComments(e.target.value)} 
-                    className={`w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 transition-colors h-28 resize-none ${actionModalOpen === 'query' || actionModalOpen === 'respond_query' ? 'focus:ring-red-500 focus:border-red-500' : 'focus:ring-orange-500 focus:border-orange-500'}`} 
-                    placeholder={actionModalOpen === 'query' ? 'Explain exactly what is wrong and what needs fixing...' : actionModalOpen === 'respond_query' ? 'Provide your response to the audit query...' : 'Add any internal notes for accounts or creator...'}
+                    className={`w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 transition-colors h-28 resize-none ${actionModalOpen === 'query' || actionModalOpen === 'respond_query' || actionModalOpen === 'review_query' ? 'focus:ring-red-500 focus:border-red-500' : 'focus:ring-orange-500 focus:border-orange-500'}`} 
+                    placeholder={actionModalOpen === 'query' ? 'Explain exactly what is wrong and what needs fixing...' : actionModalOpen === 'respond_query' ? 'Provide your response to the audit query...' : actionModalOpen === 'review_query' ? 'If dissatisfied, explain why...' : 'Add any internal notes for accounts or creator...'}
                   />
                   {actionModalOpen === 'approve' && (
                     <p className="text-xs text-stone-500 mt-2">If rejecting or sending back, you MUST provide a reason above.</p>
@@ -1422,6 +1478,16 @@ export default function Vouchers() {
                 <button onClick={handleRespondQuery} disabled={!comments.trim()} className="px-8 py-2.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-50 font-semibold transition-colors shadow-md flex items-center">
                   <Send className="w-4 h-4 mr-2" /> Send Response
                 </button>
+              )}
+              {actionModalOpen === 'review_query' && (
+                <div className="flex space-x-3 w-full">
+                  <button onClick={() => handleReviewQuery('Satisfied')} className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-semibold transition-colors shadow-md flex items-center justify-center">
+                    <CheckCircle className="w-4 h-4 mr-2" /> Satisfied
+                  </button>
+                  <button onClick={() => handleReviewQuery('Dissatisfied')} disabled={!comments.trim()} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 font-semibold transition-colors shadow-md flex items-center justify-center">
+                    <ShieldAlert className="w-4 h-4 mr-2" /> Dissatisfied (Send Back)
+                  </button>
+                </div>
               )}
               {actionModalOpen === 'add_receipt' && (
                 <button onClick={handleAddReceipt} disabled={!fileToUpload || isUploading} className="px-8 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 font-semibold transition-colors shadow-md flex items-center">
