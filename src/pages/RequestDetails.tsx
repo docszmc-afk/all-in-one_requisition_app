@@ -1911,12 +1911,12 @@ export default function RequestDetails() {
           attachment={previewAttachment}
           onClose={() => setPreviewAttachment(null)}
           readOnly={!(canApproveAudit || canApproveAccounts || canApproveDynamic)}
-          onSave={(annotatedAttachment) => {
+          onSave={async (annotatedAttachment) => {
             if (request) {
               const newAttachments = request.attachments?.map(a => 
                 a.id === annotatedAttachment.id ? annotatedAttachment : a
               );
-              updateRequest(request.id, { attachments: newAttachments });
+              await updateRequest(request.id, { attachments: newAttachments });
             }
             setPreviewAttachment(null);
           }}

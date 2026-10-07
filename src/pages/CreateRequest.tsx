@@ -686,7 +686,7 @@ export default function CreateRequest() {
             };
             
             if (isEditMode && existingRequest && idx === 0) {
-              updateRequest(existingRequest.id, {
+              await updateRequest(existingRequest.id, {
                 ...splitData,
                 status: splitData.workflow && splitData.workflow.length > 0 ? 'Pending Approval' : 'Pending Audit',
                 currentApproverIndex: splitData.workflow && splitData.workflow.length > 0 ? 0 : undefined,
@@ -732,7 +732,7 @@ export default function CreateRequest() {
           }
 
           if (prefill?.facilityRequestId) {
-            updateFacilityRequestStatus(prefill.facilityRequestId, 'Completed');
+            await updateFacilityRequestStatus(prefill.facilityRequestId, 'Completed');
             addNotification({
               userId: 'Facility',
               title: 'Facility Request Completed',
@@ -748,7 +748,7 @@ export default function CreateRequest() {
       }
 
       if (isEditMode && existingRequest) {
-        updateRequest(existingRequest.id, {
+        await updateRequest(existingRequest.id, {
           ...requestData,
           status: requestData.workflow && requestData.workflow.length > 0 ? 'Pending Approval' : 'Pending Audit',
           currentApproverIndex: requestData.workflow && requestData.workflow.length > 0 ? 0 : undefined,
@@ -794,7 +794,7 @@ export default function CreateRequest() {
       }
 
       if (prefill?.facilityRequestId) {
-        updateFacilityRequestStatus(prefill.facilityRequestId, 'Completed');
+        await updateFacilityRequestStatus(prefill.facilityRequestId, 'Completed');
         addNotification({
           userId: 'Facility',
           title: 'Facility Request Completed',

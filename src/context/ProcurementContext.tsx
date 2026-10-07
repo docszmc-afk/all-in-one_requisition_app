@@ -27,14 +27,71 @@ const ProcurementContext = createContext<ProcurementContextType | undefined>(und
 const REQ_CACHE_KEY = 'zmc_cached_procurement_requests';
 const WF_CACHE_KEY = 'zmc_cached_saved_workflows';
 
-const cleanPayload = (obj: any) => {
+const ALLOWED_COLUMNS = new Set([
+  'accountNumberRequested',
+  'accountsNotes',
+  'accountsSignature',
+  'approvals',
+  'attachments',
+  'auditNotes',
+  'auditSignature',
+  'createdAt',
+  'createdBy',
+  'creatorSignature',
+  'currentApproverIndex',
+  'department',
+  'description',
+  'dieselDetails',
+  'histologyDetails',
+  'histologyDetailsList',
+  'id',
+  'inspectedAt',
+  'inspectedBy',
+  'isBought',
+  'isDraft',
+  'isInspected',
+  'issueFromStoreDetails',
+  'items',
+  'leaveDetails',
+  'parentRequestId',
+  'paymentDate',
+  'paymentDetails',
+  'paymentInvoice',
+  'paymentStatus',
+  'productProcurementDetails',
+  'recommendedAmount',
+  'requestType',
+  'splitSupplier',
+  'status',
+  'storeRequisitionDetails',
+  'title',
+  'totalAmount',
+  'urgencyLevel',
+  'urgency_level',
+  'voidedApprovers',
+  'workflow'
+]);
+
+export const sanitizePayloadForSupabase = (obj: any) => {
   const clean: any = {};
-  Object.keys(obj || {}).forEach(key => {
-    if (obj[key] !== undefined) {
+  if (!obj) return clean;
+  for (const key of Object.keys(obj)) {
+    if (ALLOWED_COLUMNS.has(key) && obj[key] !== undefined) {
       clean[key] = obj[key];
     }
-  });
+  }
   return clean;
+};
+
+export const generateUniqueRequestId = (existingRequests: ProcurementRequest[]): string => {
+  const existingSet = new Set((existingRequests || []).map(r => r.id));
+  for (let i = 0; i < 50; i++) {
+    const candidate = `REQ-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (!existingSet.has(candidate)) {
+      return candidate;
+    }
+  }
+  return `REQ-${Date.now().toString().slice(-5)}${Math.floor(Math.random() * 90 + 10)}`;
 };
 
 const persistToStorage = (key: string, data: any) => {
@@ -155,30 +212,29 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       let from = 0;
 
       while (true) {
-        const { data, error } = await supabase
+        let res = await supabase
           .from('procurement_requests')
           .select('*')
           .order('createdAt', { ascending: false })
           .range(from, from + PAGE_SIZE - 1);
 
-        if (error) {
-          // If sorting by createdAt failed (e.g. column naming difference), try without order
-          if (from === 0) {
-            const fallback = await supabase
+        if (res.error) {
+          // If statement timeout (57014) or slow query, fall back to fast unordered scan
+          if (res.error.code === '57014' || res.error.message?.includes('timeout') || res.error.message?.includes('canceling statement')) {
+            console.warn('Procurement requests ordered query timed out. Retrying with unordered scan...');
+            res = await supabase
               .from('procurement_requests')
               .select('*')
               .range(from, from + PAGE_SIZE - 1);
-            if (!fallback.error && fallback.data) {
-              allRemoteRows = allRemoteRows.concat(fallback.data);
-              if (fallback.data.length < PAGE_SIZE) break;
-              from += PAGE_SIZE;
-              continue;
-            }
           }
-          console.warn('Procurement requests fetch warning:', error.message);
+        }
+
+        if (res.error) {
+          console.warn('Procurement requests fetch warning:', res.error.message);
           break;
         }
 
+        const data = res.data;
         if (!data || data.length === 0) break;
         allRemoteRows = allRemoteRows.concat(data);
         if (data.length < PAGE_SIZE) break;
@@ -186,17 +242,44 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
 
       if (allRemoteRows.length > 0) {
+        // Sort client-side by createdAt descending to guarantee chronological order
+        allRemoteRows.sort((a, b) => {
+          const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
+        });
+
         const parsedData = allRemoteRows.map(parseProcurementRequest);
         setRequests(prev => {
           const remoteMap = new Map(parsedData.map((r: ProcurementRequest) => [r.id, r]));
           const merged = [...parsedData];
           
-          // Preserve any local drafts or recently created items not yet in remote response
+          // Check for any requests currently in local cache that are NOT yet on the backend
+          const localOnlyRequests: ProcurementRequest[] = [];
           prev.forEach(localReq => {
             if (!remoteMap.has(localReq.id)) {
               merged.push(localReq);
+              localOnlyRequests.push(localReq);
             }
           });
+
+          // Automatically push any local-only requests to Supabase backend so they are NEVER trapped in local storage!
+          if (localOnlyRequests.length > 0) {
+            console.log(`Syncing ${localOnlyRequests.length} locally cached requests to Supabase backend...`);
+            const payloads = localOnlyRequests.map(sanitizePayloadForSupabase);
+            (async () => {
+              try {
+                const { error: syncErr } = await supabase.from('procurement_requests').upsert(payloads, { onConflict: 'id' });
+                if (syncErr) {
+                  console.warn('Failed to sync local-only requests to backend:', syncErr.message);
+                } else {
+                  console.log(`Successfully synced ${localOnlyRequests.length} requests to backend.`);
+                }
+              } catch (err) {
+                console.warn('Sync error:', err);
+              }
+            })();
+          }
 
           persistToStorage(REQ_CACHE_KEY, merged);
           return merged;
@@ -267,80 +350,77 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const { addNotification } = useNotifications();
 
   const addRequest = async (requestData: Omit<ProcurementRequest, 'id' | 'createdAt' | 'status'>) => {
+    const id = generateUniqueRequestId(requests);
     const newRequest: ProcurementRequest = {
       ...requestData,
-      id: `REQ-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
+      id,
       createdAt: new Date().toISOString(),
       status: requestData.workflow && requestData.workflow.length > 0 ? 'Pending Approval' : 'Pending Audit',
       currentApproverIndex: requestData.workflow && requestData.workflow.length > 0 ? 0 : undefined,
       approvals: []
     };
     
+    // 1. Direct persistence to Supabase backend via upsert
+    const payload = sanitizePayloadForSupabase(newRequest);
+    const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.error('Supabase upsert error on addRequest:', error);
+      throw new Error(`Failed to save request to backend: ${error.message}`);
+    }
+
+    // 2. Update local state and localStorage cache
     setRequests(prev => {
-      const updated = [newRequest, ...prev];
+      const updated = [newRequest, ...prev.filter(r => r.id !== newRequest.id)];
       persistToStorage(REQ_CACHE_KEY, updated);
       return updated;
     });
-    
-    try {
-      const { error } = await supabase.from('procurement_requests').upsert(cleanPayload(newRequest), { onConflict: 'id' });
-      if (error) {
-        console.warn('Supabase upsert warning on addRequest:', error.message, error.details);
-      }
-    } catch (err) {
-      console.warn('Supabase addRequest network error:', err);
-    }
+
     return newRequest.id;
   };
 
   const saveDraft = async (requestData: Omit<ProcurementRequest, 'id' | 'createdAt' | 'status'>, existingId?: string) => {
     try {
       if (existingId) {
-        const updates = { ...requestData, status: 'Draft' as const, isDraft: true };
-        let updatedReq: ProcurementRequest | undefined;
+        const existingReq = requests.find(r => r.id === existingId);
+        const updatedReq: ProcurementRequest = {
+          ...(existingReq || ({} as ProcurementRequest)),
+          ...requestData,
+          id: existingId,
+          status: 'Draft',
+          isDraft: true,
+        };
+        const payload = sanitizePayloadForSupabase(updatedReq);
+        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase update draft error:', error);
+          throw new Error(`Failed to save draft to backend: ${error.message}`);
+        }
         setRequests(prev => {
-          const updated = prev.map(req => {
-            if (req.id === existingId) {
-              updatedReq = { ...req, ...updates };
-              return updatedReq;
-            }
-            return req;
-          });
+          const updated = prev.map(req => req.id === existingId ? updatedReq : req);
           persistToStorage(REQ_CACHE_KEY, updated);
           return updated;
         });
-        if (updatedReq) {
-          try {
-            const { error } = await supabase.from('procurement_requests').upsert(cleanPayload(updatedReq), { onConflict: 'id' });
-            if (error) {
-              console.warn('Supabase update draft warning:', error.message);
-            }
-          } catch (e) {
-            console.warn('Supabase draft update network error:', e);
-          }
-        }
       } else {
+        const id = generateUniqueRequestId(requests);
         const newRequest: ProcurementRequest = {
           ...requestData,
-          id: `REQ-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
+          id,
           createdAt: new Date().toISOString(),
           status: 'Draft',
           isDraft: true,
           approvals: []
         };
+        const payload = sanitizePayloadForSupabase(newRequest);
+        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase insert draft error:', error);
+          throw new Error(`Failed to save draft to backend: ${error.message}`);
+        }
         setRequests(prev => {
-          const updated = [newRequest, ...prev];
+          const updated = [newRequest, ...prev.filter(r => r.id !== newRequest.id)];
           persistToStorage(REQ_CACHE_KEY, updated);
           return updated;
         });
-        try {
-          const { error } = await supabase.from('procurement_requests').upsert(cleanPayload(newRequest), { onConflict: 'id' });
-          if (error) {
-            console.warn('Supabase insert draft warning:', error.message);
-          }
-        } catch (e) {
-          console.warn('Supabase draft insert network error:', e);
-        }
       }
     } catch (error) {
       console.error('Error saving draft:', error);
@@ -350,70 +430,65 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const updateRequest = async (id: string, updates: Partial<ProcurementRequest>) => {
     try {
-      const cleaned = cleanPayload(updates);
-      let updatedReq: ProcurementRequest | undefined;
+      const existingReq = requests.find(r => r.id === id);
+      const mergedReq: ProcurementRequest = existingReq
+        ? { ...existingReq, ...updates }
+        : ({ id, ...updates } as ProcurementRequest);
+
+      const payload = sanitizePayloadForSupabase(mergedReq);
+      if (Object.keys(payload).length > 0) {
+        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase upsert error on updateRequest:', error);
+          throw new Error(`Failed to update backend: ${error.message}`);
+        }
+      }
+
       setRequests(prev => {
-        const updated = prev.map(req => {
-          if (req.id === id) {
-            updatedReq = { ...req, ...cleaned };
-            return updatedReq;
-          }
-          return req;
-        });
+        const updated = prev.map(req => req.id === id ? mergedReq : req);
         persistToStorage(REQ_CACHE_KEY, updated);
         return updated;
       });
-
-      if (updatedReq) {
-        try {
-          const { error } = await supabase.from('procurement_requests').upsert(cleanPayload(updatedReq), { onConflict: 'id' });
-          if (error) {
-            console.warn('Supabase upsert warning on updateRequest:', error.message, error.details);
-          }
-        } catch (e) {
-          console.warn('Supabase update network error:', e);
-        }
-      }
     } catch (error) {
       console.error('Error updating request:', error);
+      throw error;
     }
   };
 
   const voidApprover = async (id: string, approverId: string, reason: string) => {
     try {
       let updatedReq: ProcurementRequest | undefined;
-      setRequests(prev => {
-        const updated = prev.map(req => {
-          if (req.id === id && req.workflow && req.currentApproverIndex !== undefined) {
-            const voided = { approverId, reason, date: new Date().toISOString() };
-            let newIndex = req.currentApproverIndex + 1;
-            let newStatus = req.status;
-            
-            if (newIndex >= req.workflow.length) {
-              newStatus = 'Approved';
-            }
+      const targetReq = requests.find(r => r.id === id);
+      if (targetReq && targetReq.workflow && targetReq.currentApproverIndex !== undefined) {
+        const voided = { approverId, reason, date: new Date().toISOString() };
+        let newIndex = targetReq.currentApproverIndex + 1;
+        let newStatus = targetReq.status;
+        
+        if (newIndex >= targetReq.workflow.length) {
+          newStatus = 'Approved';
+        }
 
-            updatedReq = {
-              ...req,
-              voidedApprovers: [...(req.voidedApprovers || []), voided],
-              currentApproverIndex: newIndex,
-              status: newStatus
-            };
-            return updatedReq;
-          }
-          return req;
-        });
-        persistToStorage(REQ_CACHE_KEY, updated);
-        return updated;
-      });
+        updatedReq = {
+          ...targetReq,
+          voidedApprovers: [...(targetReq.voidedApprovers || []), voided],
+          currentApproverIndex: newIndex,
+          status: newStatus
+        };
+      }
 
       if (updatedReq) {
-        try {
-          const { error } = await supabase.from('procurement_requests').upsert(cleanPayload(updatedReq), { onConflict: 'id' });
-          if (error) console.warn('Supabase voidApprover error:', error);
-        } catch (e) {
-          console.warn('Supabase voidApprover error:', e);
+        const payload = sanitizePayloadForSupabase(updatedReq);
+        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase voidApprover error:', error);
+          throw new Error(`Failed to void approver on backend: ${error.message}`);
         }
+
+        setRequests(prev => {
+          const updated = prev.map(req => req.id === id ? updatedReq! : req);
+          persistToStorage(REQ_CACHE_KEY, updated);
+          return updated;
+        });
       }
     } catch (error: any) {
       console.error('voidApprover error:', error);
@@ -607,20 +682,22 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (requestToDeleteId && requestsToInsert.length > 0) {
         try {
           await supabase.from('procurement_requests').delete().eq('id', id);
-          for (const splitReq of requestsToInsert) {
-            await supabase.from('procurement_requests').upsert(cleanPayload(splitReq), { onConflict: 'id' });
+          const sanitizedSplit = requestsToInsert.map(sanitizePayloadForSupabase);
+          const { error: insErr } = await supabase.from('procurement_requests').upsert(sanitizedSplit, { onConflict: 'id' });
+          if (insErr) {
+            console.error('Supabase split insert error on backend:', insErr);
+            throw new Error(`Failed to save split requests: ${insErr.message}`);
           }
-        } catch (e) {
-          console.warn('Supabase split write error:', e);
+        } catch (e: any) {
+          console.error('Supabase split write error:', e);
+          throw e;
         }
       } else if (requestToUpdate) {
-        try {
-          const { error } = await supabase.from('procurement_requests').upsert(cleanPayload(requestToUpdate), { onConflict: 'id' });
-          if (error) {
-            console.warn('Supabase update warning in processApproval:', error);
-          }
-        } catch (e) {
-          console.warn('Supabase processApproval network error:', e);
+        const payload = sanitizePayloadForSupabase(requestToUpdate);
+        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase backend upsert error in processApproval:', error);
+          throw new Error(`Failed to save approval to backend: ${error.message}`);
         }
       }
     } catch (error: any) {
@@ -712,13 +789,11 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
           }
         }
 
-        try {
-          const { error } = await supabase.from('procurement_requests').upsert(cleanPayload(updatedReq), { onConflict: 'id' });
-          if (error) {
-            console.warn('Supabase updateRequestStatus warning:', error);
-          }
-        } catch (e) {
-          console.warn('Supabase updateRequestStatus network error:', e);
+        const payload = sanitizePayloadForSupabase(updatedReq);
+        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase backend updateRequestStatus error:', error);
+          throw new Error(`Failed to update request status on backend: ${error.message}`);
         }
       }
     } catch (error: any) {
@@ -738,12 +813,12 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return updated;
     });
     try {
-      const { error } = await supabase.from('saved_workflows').insert(cleanPayload({
+      const { error } = await supabase.from('saved_workflows').insert({
         id: newWorkflow.id,
         name: newWorkflow.name,
         approver_ids: newWorkflow.approverIds,
         creator_id: newWorkflow.creatorId
-      }));
+      });
       if (error) {
         console.warn('Error saving workflow to Supabase:', error);
       } else {
@@ -793,11 +868,11 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       });
 
       if (updatedReq) {
-        try {
-          const { error } = await supabase.from('procurement_requests').upsert(cleanPayload(updatedReq), { onConflict: 'id' });
-          if (error) console.warn('Supabase markAsPaid warning:', error);
-        } catch (e) {
-          console.warn('Supabase markAsPaid network error:', e);
+        const payload = sanitizePayloadForSupabase(updatedReq);
+        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase backend markAsPaid error:', error);
+          throw new Error(`Failed to save payment status on backend: ${error.message}`);
         }
       }
     } catch (error: any) {
@@ -825,11 +900,11 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       });
 
       if (updatedReq) {
-        try {
-          const { error } = await supabase.from('procurement_requests').upsert(cleanPayload(updatedReq), { onConflict: 'id' });
-          if (error) console.warn('Supabase requestAccountNumber warning:', error);
-        } catch (e) {
-          console.warn('Supabase requestAccountNumber network error:', e);
+        const payload = sanitizePayloadForSupabase(updatedReq);
+        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase backend requestAccountNumber error:', error);
+          throw new Error(`Failed to request account number on backend: ${error.message}`);
         }
       }
     } catch (error: any) {
