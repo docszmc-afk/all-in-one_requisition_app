@@ -40,20 +40,35 @@ export default function RequestList() {
     return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>;
   }
 
-  const userRequests = user?.role === 'Creator' 
-    ? requests.filter(r => r.department === user.department)
+  const isVoucherOnlyUser = user?.email === 'niyi01@zankli.com' || user?.email === 'promise@zankli.com';
+
+  const userRequests = isVoucherOnlyUser ? [] : user?.role === 'Creator' 
+    ? requests.filter(r => 
+        (r.department && user?.department && r.department.toLowerCase() === user.department.toLowerCase()) || 
+        r.createdBy === user?.id || 
+        r.createdBy === user?.email ||
+        (Array.isArray(r.workflow) && user?.id && r.workflow.includes(user.id)) ||
+        (Array.isArray(r.workflow) && user?.email && r.workflow.includes(user.email))
+      )
     : user?.role === 'Both'
-    ? requests.filter(r => r.department === user.department || (r.workflow && r.workflow.includes(user.id)))
+    ? requests.filter(r => 
+        (r.department && user?.department && r.department.toLowerCase() === user.department.toLowerCase()) || 
+        r.createdBy === user?.id || 
+        r.createdBy === user?.email || 
+        (Array.isArray(r.workflow) && user?.id && r.workflow.includes(user.id)) ||
+        (Array.isArray(r.workflow) && user?.email && r.workflow.includes(user.email))
+      )
     : requests;
 
   const filteredRequests = userRequests.filter(req => {
     const matchesSearch = (req.title?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
-                          (req.id?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+                          (req.id?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                          (req.createdBy?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     
     let matchesStatus = statusFilter === 'All' || req.status === statusFilter;
     
     if (statusFilter === 'Action Required') {
-      const isDynamicWorkflow = req.workflow && req.workflow.length > 0;
+      const isDynamicWorkflow = Array.isArray(req.workflow) && req.workflow.length > 0;
       if (isDynamicWorkflow) {
         matchesStatus = req.status === 'Pending Approval' && 
                         req.currentApproverIndex !== undefined && 
@@ -65,10 +80,14 @@ export default function RequestList() {
       }
     }
 
-    const matchesDepartment = departmentFilter === 'All' || req.department === departmentFilter;
+    const matchesDepartment = departmentFilter === 'All' || (req.department && req.department.toLowerCase() === departmentFilter.toLowerCase());
 
     return matchesSearch && matchesStatus && matchesDepartment;
-  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }).sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+  });
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);

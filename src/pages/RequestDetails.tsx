@@ -58,6 +58,15 @@ export default function RequestDetails() {
   const [isRequestInspected, setIsRequestInspected] = useState(false);
   const [isSavingInspection, setIsSavingInspection] = useState(false);
 
+  // Reset transient state when switching to a different request
+  React.useEffect(() => {
+    setPreviewAttachment(null);
+    setNotes('');
+    setApproverSignature('');
+    window.scrollTo(0, 0);
+  }, [request?.id]);
+
+  // Synchronize state when request data updates
   React.useEffect(() => {
     if (request) {
       setEditableItems(request.items || []);
@@ -73,16 +82,18 @@ export default function RequestDetails() {
       setRecommendedAmount(request.recommendedAmount ?? '');
       setIsRequestBought(request.isBought || false);
       setIsRequestInspected(request.isInspected || false);
-      
-      // Reset state that might carry over from previous request
-      setPreviewAttachment(null);
-      setNotes('');
-      setApproverSignature('');
-      
-      // Scroll to top when viewing a new request
-      window.scrollTo(0, 0);
     }
-  }, [request?.id]);
+  }, [
+    request?.id, 
+    request?.status, 
+    request?.isBought, 
+    request?.isInspected, 
+    request?.recommendedAmount, 
+    request?.items, 
+    request?.histologyDetailsList, 
+    request?.histologyDetails,
+    request?.currentApproverIndex
+  ]);
 
   React.useEffect(() => {
     if (request && request.items) {
@@ -425,8 +436,14 @@ export default function RequestDetails() {
       }
 
       navigate(-1);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error handling action:', error);
+      addNotification({
+        userId: user?.id || 'system',
+        title: 'Action Failed',
+        message: error?.message || 'Failed to submit action. Please try again.',
+        type: 'error',
+      });
       setIsSubmittingAction(false);
     }
   };
@@ -686,11 +703,7 @@ export default function RequestDetails() {
             </button>
           )}
 
-          {(request.status === 'Sent Back' || request.status === 'Draft') && 
-           (request.createdBy === user?.email || 
-            user?.department === 'Facility' || 
-            user?.email === 'labzankli@gmail.com' || 
-            user?.email === 'storezankli@gmail.com') && (
+          {(request.status === 'Sent Back' || request.status === 'Draft') && request.createdBy === user?.email && (
             <button
               onClick={() => navigate(`/requests/edit/${request.id}`)}
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors"

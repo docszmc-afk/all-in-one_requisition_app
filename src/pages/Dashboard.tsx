@@ -37,7 +37,10 @@ export default function Dashboard() {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
   const years = useMemo(() => {
-    const y = Array.from(new Set(requests.map(r => new Date(r.createdAt).getFullYear()))).sort((a,b) => b-a);
+    const validYears = requests
+      .map(r => r.createdAt ? new Date(r.createdAt).getFullYear() : NaN)
+      .filter(y => !isNaN(y));
+    const y = Array.from(new Set(validYears)).sort((a, b) => b - a);
     if (y.length === 0) y.push(new Date().getFullYear());
     return y;
   }, [requests]);
@@ -56,8 +59,9 @@ export default function Dashboard() {
     const data: Record<string, Record<string, number>> = {}; 
     
     requests.forEach(req => {
-      if (req.status === 'Approved') {
+      if (req.status === 'Approved' && req.createdAt) {
         const date = new Date(req.createdAt);
+        if (isNaN(date.getTime())) return;
         const year = date.getFullYear();
         
         if (year === selectedYear) {
@@ -77,8 +81,9 @@ export default function Dashboard() {
   const yearlyExpenses = useMemo(() => {
      const data: Record<string, Record<number, number>> = {};
      requests.forEach(req => {
-      if (req.status === 'Approved') {
+      if (req.status === 'Approved' && req.createdAt) {
         const date = new Date(req.createdAt);
+        if (isNaN(date.getTime())) return;
         const year = date.getFullYear();
         const dept = req.department || 'Unspecified';
         
@@ -94,9 +99,21 @@ export default function Dashboard() {
   const isVoucherOnlyUser = user?.email === 'niyi01@zankli.com' || user?.email === 'promise@zankli.com';
 
   const userRequests = isVoucherOnlyUser ? [] : user?.role === 'Creator' 
-    ? requests.filter(r => r.department === user.department)
+    ? requests.filter(r => 
+        (r.department && user?.department && r.department.toLowerCase() === user.department.toLowerCase()) || 
+        r.createdBy === user?.id || 
+        r.createdBy === user?.email ||
+        (Array.isArray(r.workflow) && user?.id && r.workflow.includes(user.id)) ||
+        (Array.isArray(r.workflow) && user?.email && r.workflow.includes(user.email))
+      )
     : user?.role === 'Both'
-    ? requests.filter(r => r.department === user.department || (r.workflow && r.workflow.includes(user.id)))
+    ? requests.filter(r => 
+        (r.department && user?.department && r.department.toLowerCase() === user.department.toLowerCase()) || 
+        r.createdBy === user?.id || 
+        r.createdBy === user?.email || 
+        (Array.isArray(r.workflow) && user?.id && r.workflow.includes(user.id)) ||
+        (Array.isArray(r.workflow) && user?.email && r.workflow.includes(user.email))
+      )
     : requests;
 
   // Filter and Sort Logic
@@ -104,12 +121,12 @@ export default function Dashboard() {
     const matchesSearch = (req.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (req.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (req.createdBy || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment = departmentFilter === 'All' || req.department === departmentFilter;
+    const matchesDepartment = departmentFilter === 'All' || (req.department && req.department.toLowerCase() === departmentFilter.toLowerCase());
     return matchesSearch && matchesDepartment;
   });
 
   const requestsWithAction = filteredRequests.map(req => {
-    const isDynamicWorkflow = req.workflow && req.workflow.length > 0;
+    const isDynamicWorkflow = Array.isArray(req.workflow) && req.workflow.length > 0;
     let needsAction = false;
 
     if (isDynamicWorkflow) {

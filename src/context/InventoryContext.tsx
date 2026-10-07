@@ -12,8 +12,17 @@ interface InventoryContextType {
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
+const INV_CACHE_KEY = 'zmc_cached_inventory';
+
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(INV_CACHE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const { addNotification } = useNotifications();
 
   useEffect(() => {
@@ -22,19 +31,24 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const { data, error } = await supabase.from('inventory').select('*');
         if (error) throw error;
         if (data) {
-          setInventory(data.map((item: any) => ({
+          const parsed = data.map((item: any) => ({
             id: item.id,
             name: item.name,
             inStock: item.in_stock !== undefined ? item.in_stock : (item.inStock || 0),
             unitCost: item.unit_cost !== undefined ? item.unit_cost : (item.unitCost || 0),
-          })));
+          }));
+          setInventory(parsed);
+          try { localStorage.setItem(INV_CACHE_KEY, JSON.stringify(parsed)); } catch {}
         }
       } catch (error: any) {
         console.error('Error fetching inventory:', error);
+        const hasCache = inventory.length > 0 || localStorage.getItem(INV_CACHE_KEY);
         if (error?.message === 'Failed to fetch' || error?.message?.includes('Failed to fetch')) {
-           toast.error('Network Error: Could not connect to the database. Please check your internet connection or ensure your Supabase project is active.');
+          if (!hasCache) toast.error('Network Error: Could not connect to the database.');
+        } else if (error?.code === '57014' || error?.message?.includes('timeout')) {
+          console.warn('Inventory query timed out, served from cache');
         } else {
-           toast.error('Failed to load inventory data');
+          if (!hasCache) toast.error('Failed to load inventory data');
         }
       }
     };
