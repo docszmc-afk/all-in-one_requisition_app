@@ -457,9 +457,11 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const voidApprover = async (id: string, approverId: string, reason: string) => {
     try {
-      let updatedReq: ProcurementRequest | undefined;
       const targetReq = requests.find(r => r.id === id);
-      if (targetReq && targetReq.workflow && targetReq.currentApproverIndex !== undefined) {
+      if (!targetReq) return;
+
+      let updatedReq: ProcurementRequest = { ...targetReq };
+      if (targetReq.workflow && targetReq.currentApproverIndex !== undefined) {
         const voided = { approverId, reason, date: new Date().toISOString() };
         let newIndex = targetReq.currentApproverIndex + 1;
         let newStatus = targetReq.status;
@@ -476,20 +478,18 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         };
       }
 
-      if (updatedReq) {
-        const payload = sanitizePayloadForSupabase(updatedReq);
-        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
-        if (error) {
-          console.error('Supabase voidApprover error:', error);
-          throw new Error(`Failed to void approver on backend: ${error.message}`);
-        }
-
-        setRequests(prev => {
-          const updated = prev.map(req => req.id === id ? updatedReq! : req);
-          persistToStorage(REQ_CACHE_KEY, updated);
-          return updated;
-        });
+      const payload = sanitizePayloadForSupabase(updatedReq);
+      const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+      if (error) {
+        console.error('Supabase voidApprover error:', error);
+        throw new Error(`Failed to void approver on backend: ${error.message}`);
       }
+
+      setRequests(prev => {
+        const updated = prev.map(req => req.id === id ? updatedReq : req);
+        persistToStorage(REQ_CACHE_KEY, updated);
+        return updated;
+      });
     } catch (error: any) {
       console.error('voidApprover error:', error);
       throw error;
@@ -499,7 +499,6 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const processApproval = async (id: string, approverId: string, status: 'Approved' | 'Rejected' | 'Sent Back', signature: string, notes?: string, updatedItems?: ProcurementItem[]) => {
     try {
       console.log('processApproval called for request:', id, 'status:', status);
-      // Notification Logic
       const req = requests.find(r => r.id === id);
       if (!req) {
         console.error('Request not found for ID:', id);
@@ -511,9 +510,7 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       if (status === 'Approved') {
         if (req.workflow && req.currentApproverIndex !== undefined && req.currentApproverIndex < req.workflow.length - 1) {
-          // Moving to next approver
           const nextApproverId = req.workflow[req.currentApproverIndex + 1];
-          
           addNotification({
             userId: nextApproverId,
             title: 'Action Required',
@@ -521,7 +518,6 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
             type: 'info',
             link: `/requests/${req.id}`
           });
-
           addNotification({
             userId: req.createdBy,
             title: 'Request Moved',
@@ -530,7 +526,6 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
             link: `/requests/${req.id}`
           });
         } else {
-          // Final approval
           addNotification({
             userId: req.createdBy,
             title: 'Request Approved',
@@ -557,110 +552,85 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         });
       }
 
+      const approvalRecord: ApprovalRecord = {
+        approverId,
+        status,
+        signature,
+        notes,
+        date: new Date().toISOString()
+      };
+      
+      const updatedApprovals = [...(req.approvals || []), approvalRecord];
+      let newStatus = req.status;
+      let newIndex = req.currentApproverIndex;
+
+      if (status === 'Rejected') {
+        newStatus = 'Rejected';
+      } else if (status === 'Sent Back') {
+        newStatus = 'Sent Back';
+      } else if (status === 'Approved') {
+        if (req.workflow && req.currentApproverIndex !== undefined) {
+          if (req.currentApproverIndex < req.workflow.length - 1) {
+            newIndex = req.currentApproverIndex + 1;
+            newStatus = 'Pending Approval';
+          } else {
+            newStatus = 'Approved';
+          }
+        } else {
+          newStatus = 'Approved';
+        }
+      }
+
+      const isLabPurchaseSplit = req.requestType === 'Lab Purchase Order' && approverId === '2'; // storezankli
+      const isEquipmentSplit = req.requestType === 'Equipment Request' && approverId === '1'; // labzankli
+      const isPharmacySplit = req.requestType === 'Pharmacy Purchase Order' && approverId === '2'; // storezankli
+
+      const currentItems = updatedItems || req.items || [];
       let requestsToInsert: ProcurementRequest[] = [];
       let requestToUpdate: ProcurementRequest | undefined;
       let requestToDeleteId: string | undefined;
 
-      setRequests(prev => {
-        let newRequests = [...prev];
-        const reqIndex = newRequests.findIndex(r => r.id === id);
-        if (reqIndex === -1) return prev;
+      if (status === 'Approved' && (isLabPurchaseSplit || isEquipmentSplit || isPharmacySplit) && currentItems.length > 0) {
+        const availableItems = currentItems.filter(item => item.availability !== 'Out of Stock');
+        const suppliers = Array.from(new Set(availableItems.map(item => item.supplier || 'Unspecified')));
         
-        const targetReq = newRequests[reqIndex];
-        const approvalRecord: ApprovalRecord = {
-          approverId,
-          status,
-          signature,
-          notes,
-          date: new Date().toISOString()
-        };
-        
-        const updatedApprovals = [...(targetReq.approvals || []), approvalRecord];
-        let newStatus = targetReq.status;
-        let newIndex = targetReq.currentApproverIndex;
-
-        if (status === 'Rejected') {
-          newStatus = 'Rejected';
-        } else if (status === 'Sent Back') {
-          newStatus = 'Sent Back';
-        } else if (status === 'Approved') {
-          if (targetReq.workflow && targetReq.currentApproverIndex !== undefined) {
-            if (targetReq.currentApproverIndex < targetReq.workflow.length - 1) {
-              newIndex = targetReq.currentApproverIndex + 1;
-              newStatus = 'Pending Approval';
-            } else {
-              newStatus = 'Approved';
-            }
-          } else {
-            newStatus = 'Approved';
-          }
-        }
-
-        const isLabPurchaseSplit = targetReq.requestType === 'Lab Purchase Order' && approverId === '2'; // storezankli
-        const isEquipmentSplit = targetReq.requestType === 'Equipment Request' && approverId === '1'; // labzankli
-        const isPharmacySplit = targetReq.requestType === 'Pharmacy Purchase Order' && approverId === '2'; // storezankli
-
-        // Use updatedItems if provided, otherwise use existing items
-        const currentItems = updatedItems || targetReq.items || [];
-
-        // Handle Store splitting logic
-        if (status === 'Approved' && (isLabPurchaseSplit || isEquipmentSplit || isPharmacySplit) && currentItems.length > 0) {
-          const availableItems = currentItems.filter(item => item.availability !== 'Out of Stock');
-          const suppliers = Array.from(new Set(availableItems.map(item => item.supplier || 'Unspecified')));
-          
-          if (suppliers.length > 1) {
-            const splitRequests: ProcurementRequest[] = suppliers.map((supplier, idx) => {
-              const supplierItems = availableItems.filter(item => (item.supplier || 'Unspecified') === supplier);
-              const supplierTotal = supplierItems.reduce((sum, item) => sum + (item.quantity * (item.recommendedPrice || item.estimatedCost)), 0);
-              
-              return {
-                ...targetReq,
-                id: `${targetReq.id}-${idx + 1}`,
-                parentRequestId: targetReq.id,
-                splitSupplier: supplier,
-                items: supplierItems,
-                totalAmount: supplierTotal,
-                approvals: updatedApprovals,
-                status: newStatus,
-                currentApproverIndex: newIndex
-              };
-            });
+        if (suppliers.length > 1) {
+          requestsToInsert = suppliers.map((supplier, idx) => {
+            const supplierItems = availableItems.filter(item => (item.supplier || 'Unspecified') === supplier);
+            const supplierTotal = supplierItems.reduce((sum, item) => sum + (item.quantity * (item.recommendedPrice || item.estimatedCost)), 0);
             
-            requestsToInsert = splitRequests;
-            requestToDeleteId = targetReq.id;
-
-            newRequests.splice(reqIndex, 1, ...splitRequests);
-            persistToStorage(REQ_CACHE_KEY, newRequests);
-            return newRequests;
-          } else {
-            const updatedReq = { 
-              ...targetReq, 
-              items: availableItems,
-              totalAmount: availableItems.reduce((sum, item) => sum + (item.quantity * (item.recommendedPrice || item.estimatedCost)), 0),
+            return {
+              ...req,
+              id: `${req.id}-${idx + 1}`,
+              parentRequestId: req.id,
+              splitSupplier: supplier,
+              items: supplierItems,
+              totalAmount: supplierTotal,
               approvals: updatedApprovals,
               status: newStatus,
               currentApproverIndex: newIndex
             };
-            requestToUpdate = updatedReq;
-            newRequests[reqIndex] = updatedReq;
-            persistToStorage(REQ_CACHE_KEY, newRequests);
-            return newRequests;
-          }
+          });
+          requestToDeleteId = req.id;
+        } else {
+          requestToUpdate = { 
+            ...req, 
+            items: availableItems,
+            totalAmount: availableItems.reduce((sum, item) => sum + (item.quantity * (item.recommendedPrice || item.estimatedCost)), 0),
+            approvals: updatedApprovals,
+            status: newStatus,
+            currentApproverIndex: newIndex
+          };
         }
-
-        const updatedReq = { 
-          ...targetReq, 
+      } else {
+        requestToUpdate = { 
+          ...req, 
           items: currentItems,
           approvals: updatedApprovals,
           status: newStatus,
           currentApproverIndex: newIndex
         };
-
-        requestToUpdate = updatedReq;
-        newRequests[reqIndex] = updatedReq;
-        persistToStorage(REQ_CACHE_KEY, newRequests);
-        return newRequests;
-      });
+      }
 
       // Handle inventory updates upon full approval
       if (requestToUpdate && requestToUpdate.status === 'Approved' && req.status !== 'Approved') {
@@ -680,18 +650,25 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
 
       if (requestToDeleteId && requestsToInsert.length > 0) {
-        try {
-          await supabase.from('procurement_requests').delete().eq('id', id);
-          const sanitizedSplit = requestsToInsert.map(sanitizePayloadForSupabase);
-          const { error: insErr } = await supabase.from('procurement_requests').upsert(sanitizedSplit, { onConflict: 'id' });
-          if (insErr) {
-            console.error('Supabase split insert error on backend:', insErr);
-            throw new Error(`Failed to save split requests: ${insErr.message}`);
-          }
-        } catch (e: any) {
-          console.error('Supabase split write error:', e);
-          throw e;
+        await supabase.from('procurement_requests').delete().eq('id', id);
+        const sanitizedSplit = requestsToInsert.map(sanitizePayloadForSupabase);
+        const { error: insErr } = await supabase.from('procurement_requests').upsert(sanitizedSplit, { onConflict: 'id' });
+        if (insErr) {
+          console.error('Supabase split insert error on backend:', insErr);
+          throw new Error(`Failed to save split requests: ${insErr.message}`);
         }
+
+        setRequests(prev => {
+          const reqIndex = prev.findIndex(r => r.id === id);
+          const newRequests = [...prev];
+          if (reqIndex !== -1) {
+            newRequests.splice(reqIndex, 1, ...requestsToInsert);
+          } else {
+            newRequests.push(...requestsToInsert);
+          }
+          persistToStorage(REQ_CACHE_KEY, newRequests);
+          return newRequests;
+        });
       } else if (requestToUpdate) {
         const payload = sanitizePayloadForSupabase(requestToUpdate);
         const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
@@ -699,6 +676,12 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
           console.error('Supabase backend upsert error in processApproval:', error);
           throw new Error(`Failed to save approval to backend: ${error.message}`);
         }
+
+        setRequests(prev => {
+          const updated = prev.map(r => r.id === id ? requestToUpdate! : r);
+          persistToStorage(REQ_CACHE_KEY, updated);
+          return updated;
+        });
       }
     } catch (error: any) {
       console.error('processApproval error:', error);
@@ -708,94 +691,83 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const updateRequestStatus = async (id: string, status: RequestStatus | 'Draft', notes?: string, role?: 'Audit' | 'Accounts', signature?: string) => {
     try {
-      let updatedReq: ProcurementRequest | undefined;
-
-      // Notification Logic
       const req = requests.find(r => r.id === id);
-      if (req) {
-        if (status === 'Pending Accounts') {
-          // Notify Accounts
-          addNotification({
-            userId: 'Accounts',
-            title: 'Action Required',
-            message: `A request is pending your approval: ${req.title}`,
-            type: 'info',
-            link: `/requests/${req.id}`
-          });
-        }
+      if (!req) return;
 
-        // Notify creator of status change
-        if (status === 'Approved') {
-          addNotification({
-            userId: req.createdBy,
-            title: 'Request Approved',
-            message: `Your request "${req.title}" has been approved by ${role}.`,
-            type: 'success',
-            link: `/requests/${req.id}`
+      if (status === 'Pending Accounts') {
+        addNotification({
+          userId: 'Accounts',
+          title: 'Action Required',
+          message: `A request is pending your approval: ${req.title}`,
+          type: 'info',
+          link: `/requests/${req.id}`
+        });
+      }
+
+      if (status === 'Approved') {
+        addNotification({
+          userId: req.createdBy,
+          title: 'Request Approved',
+          message: `Your request "${req.title}" has been approved by ${role}.`,
+          type: 'success',
+          link: `/requests/${req.id}`
+        });
+      } else if (status === 'Rejected') {
+        addNotification({
+          userId: req.createdBy,
+          title: 'Request Rejected',
+          message: `Your request "${req.title}" has been rejected by ${role}.`,
+          type: 'error',
+          link: `/requests/${req.id}`
+        });
+      } else if (status === 'Sent Back') {
+        addNotification({
+          userId: req.createdBy,
+          title: 'Request Sent Back',
+          message: `Your request "${req.title}" has been sent back by ${role}.`,
+          type: 'warning',
+          link: `/requests/${req.id}`
+        });
+      }
+
+      const updatedReq: ProcurementRequest = { ...req, status };
+      if (role === 'Audit') {
+        if (notes) updatedReq.auditNotes = notes;
+        if (signature) updatedReq.auditSignature = signature;
+      } else if (role === 'Accounts') {
+        if (notes) updatedReq.accountsNotes = notes;
+        if (signature) updatedReq.accountsSignature = signature;
+      }
+
+      // Handle inventory updates upon full approval
+      if (updatedReq.status === 'Approved' && req.status !== 'Approved') {
+        if (updatedReq.requestType === 'Store Requisition' && updatedReq.items) {
+          updatedReq.items.forEach(item => {
+            if (item.inventoryItemId && !item.isManual) {
+              updateStock(item.inventoryItemId, item.quantity);
+            }
           });
-        } else if (status === 'Rejected') {
-          addNotification({
-            userId: req.createdBy,
-            title: 'Request Rejected',
-            message: `Your request "${req.title}" has been rejected by ${role}.`,
-            type: 'error',
-            link: `/requests/${req.id}`
-          });
-        } else if (status === 'Sent Back') {
-          addNotification({
-            userId: req.createdBy,
-            title: 'Request Sent Back',
-            message: `Your request "${req.title}" has been sent back by ${role}.`,
-            type: 'warning',
-            link: `/requests/${req.id}`
+        } else if (updatedReq.requestType === 'Issue From Store' && updatedReq.items) {
+          updatedReq.items.forEach(item => {
+            if (item.inventoryItemId && !item.isManual) {
+              updateStock(item.inventoryItemId, -item.quantity);
+            }
           });
         }
+      }
+
+      const payload = sanitizePayloadForSupabase(updatedReq);
+      const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+      if (error) {
+        console.error('Supabase backend updateRequestStatus error:', error);
+        throw new Error(`Failed to update request status on backend: ${error.message}`);
       }
 
       setRequests(prev => {
-        const updated = prev.map(r => {
-          if (r.id === id) {
-            updatedReq = { ...r, status };
-            if (role === 'Audit') {
-              if (notes) updatedReq.auditNotes = notes;
-              if (signature) updatedReq.auditSignature = signature;
-            } else if (role === 'Accounts') {
-              if (notes) updatedReq.accountsNotes = notes;
-              if (signature) updatedReq.accountsSignature = signature;
-            }
-            return updatedReq;
-          }
-          return r;
-        });
+        const updated = prev.map(r => r.id === id ? updatedReq : r);
         persistToStorage(REQ_CACHE_KEY, updated);
         return updated;
       });
-
-      if (updatedReq) {
-        // Handle inventory updates upon full approval
-        if (updatedReq.status === 'Approved' && req?.status !== 'Approved') {
-          if (updatedReq.requestType === 'Store Requisition' && updatedReq.items) {
-            updatedReq.items.forEach(item => {
-              if (item.inventoryItemId && !item.isManual) {
-                updateStock(item.inventoryItemId, item.quantity);
-              }
-            });
-          } else if (updatedReq.requestType === 'Issue From Store' && updatedReq.items) {
-            updatedReq.items.forEach(item => {
-              if (item.inventoryItemId && !item.isManual) {
-                updateStock(item.inventoryItemId, -item.quantity);
-              }
-            });
-          }
-        }
-
-        const payload = sanitizePayloadForSupabase(updatedReq);
-        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
-        if (error) {
-          console.error('Supabase backend updateRequestStatus error:', error);
-          throw new Error(`Failed to update request status on backend: ${error.message}`);
-        }
-      }
     } catch (error: any) {
       console.error('updateRequestStatus error:', error);
       throw error;
@@ -849,32 +821,28 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const markAsPaid = async (id: string, invoice?: Attachment) => {
     try {
-      let updatedReq: ProcurementRequest | undefined;
+      const req = requests.find(r => r.id === id);
+      if (!req) return;
+
+      const updatedReq: ProcurementRequest = {
+        ...req,
+        paymentStatus: 'Paid',
+        paymentDate: new Date().toISOString(),
+        paymentInvoice: invoice || req.paymentInvoice
+      };
+
+      const payload = sanitizePayloadForSupabase(updatedReq);
+      const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+      if (error) {
+        console.error('Supabase backend markAsPaid error:', error);
+        throw new Error(`Failed to save payment status on backend: ${error.message}`);
+      }
+
       setRequests(prev => {
-        const updated = prev.map(req => {
-          if (req.id === id) {
-            updatedReq = {
-              ...req,
-              paymentStatus: 'Paid',
-              paymentDate: new Date().toISOString(),
-              paymentInvoice: invoice || req.paymentInvoice
-            };
-            return updatedReq;
-          }
-          return req;
-        });
+        const updated = prev.map(r => r.id === id ? updatedReq : r);
         persistToStorage(REQ_CACHE_KEY, updated);
         return updated;
       });
-
-      if (updatedReq) {
-        const payload = sanitizePayloadForSupabase(updatedReq);
-        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
-        if (error) {
-          console.error('Supabase backend markAsPaid error:', error);
-          throw new Error(`Failed to save payment status on backend: ${error.message}`);
-        }
-      }
     } catch (error: any) {
       console.error('markAsPaid error:', error);
       throw error;
@@ -883,30 +851,26 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const requestAccountNumber = async (id: string) => {
     try {
-      let updatedReq: ProcurementRequest | undefined;
+      const req = requests.find(r => r.id === id);
+      if (!req) return;
+
+      const updatedReq: ProcurementRequest = {
+        ...req,
+        accountNumberRequested: true
+      };
+
+      const payload = sanitizePayloadForSupabase(updatedReq);
+      const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
+      if (error) {
+        console.error('Supabase backend requestAccountNumber error:', error);
+        throw new Error(`Failed to request account number on backend: ${error.message}`);
+      }
+
       setRequests(prev => {
-        const updated = prev.map(req => {
-          if (req.id === id) {
-            updatedReq = {
-              ...req,
-              accountNumberRequested: true
-            };
-            return updatedReq;
-          }
-          return req;
-        });
+        const updated = prev.map(r => r.id === id ? updatedReq : r);
         persistToStorage(REQ_CACHE_KEY, updated);
         return updated;
       });
-
-      if (updatedReq) {
-        const payload = sanitizePayloadForSupabase(updatedReq);
-        const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
-        if (error) {
-          console.error('Supabase backend requestAccountNumber error:', error);
-          throw new Error(`Failed to request account number on backend: ${error.message}`);
-        }
-      }
     } catch (error: any) {
       console.error('requestAccountNumber error:', error);
       throw error;
