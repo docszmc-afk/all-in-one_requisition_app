@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { ProcurementRequest, RequestStatus, SavedWorkflow, ApprovalRecord, Attachment, ProcurementItem } from '../types';
 import { useInventory } from './InventoryContext';
 import { useNotifications } from './NotificationContext';
@@ -164,7 +164,7 @@ export const parseProcurementRequest = (raw: any): ProcurementRequest => {
     accountNumberRequested: Boolean(raw.accountNumberRequested ?? raw.account_number_requested ?? false),
     isBought: Boolean(raw.isBought ?? raw.is_bought ?? false),
     isInspected: Boolean(raw.isInspected ?? raw.is_inspected ?? false),
-    inspectedBy: raw.inspectedBy || raw.inspected_by,
+    inspectedBy: raw.inspectedBy || raw.inspected_at,
     inspectedAt: raw.inspectedAt || raw.inspected_at,
   };
 };
@@ -182,6 +182,18 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return [];
     }
   });
+
+  const requestsRef = useRef<ProcurementRequest[]>(requests);
+  useEffect(() => {
+    requestsRef.current = requests;
+  }, [requests]);
+
+  const updateLocalAndRef = (updatedList: ProcurementRequest[]) => {
+    requestsRef.current = updatedList;
+    setRequests(updatedList);
+    persistToStorage(REQ_CACHE_KEY, updatedList);
+  };
+
   const [savedWorkflows, setSavedWorkflows] = useState<SavedWorkflow[]>(() => {
     try {
       const saved = localStorage.getItem(WF_CACHE_KEY);
@@ -192,7 +204,6 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   });
   const [loading, setLoading] = useState(false);
 
-  // Sync state to local storage whenever requests change
   useEffect(() => {
     if (requests && requests.length > 0) {
       persistToStorage(REQ_CACHE_KEY, requests);
@@ -219,7 +230,6 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
           .range(from, from + PAGE_SIZE - 1);
 
         if (res.error) {
-          // If statement timeout (57014) or slow query, fall back to fast unordered scan
           if (res.error.code === '57014' || res.error.message?.includes('timeout') || res.error.message?.includes('canceling statement')) {
             console.warn('Procurement requests ordered query timed out. Retrying with unordered scan...');
             res = await supabase
@@ -242,48 +252,55 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
 
       if (allRemoteRows.length > 0) {
-        // Sort client-side by createdAt descending to guarantee chronological order
-        allRemoteRows.sort((a, b) => {
+        const parsedData = allRemoteRows.map(parseProcurementRequest);
+        
+        const mergedMap = new Map<string, ProcurementRequest>();
+        parsedData.forEach((r: ProcurementRequest) => {
+          mergedMap.set(r.id, r);
+        });
+
+        // Smart merge with local state to preserve recent approvals/updates
+        const localToSync: ProcurementRequest[] = [];
+        requestsRef.current.forEach(localReq => {
+          const remoteReq = mergedMap.get(localReq.id);
+          if (!remoteReq) {
+            mergedMap.set(localReq.id, localReq);
+            localToSync.push(localReq);
+          } else {
+            const localApprovalCount = localReq.approvals?.length || 0;
+            const remoteApprovalCount = remoteReq.approvals?.length || 0;
+            const localVoidedCount = localReq.voidedApprovers?.length || 0;
+            const remoteVoidedCount = remoteReq.voidedApprovers?.length || 0;
+
+            if (
+              localApprovalCount > remoteApprovalCount ||
+              localVoidedCount > remoteVoidedCount ||
+              (localReq.status !== 'Pending Approval' && remoteReq.status === 'Pending Approval' && localApprovalCount >= remoteApprovalCount)
+            ) {
+              mergedMap.set(localReq.id, localReq);
+              localToSync.push(localReq);
+            }
+          }
+        });
+
+        const merged = Array.from(mergedMap.values());
+        merged.sort((a, b) => {
           const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
           const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
           return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
         });
 
-        const parsedData = allRemoteRows.map(parseProcurementRequest);
-        setRequests(prev => {
-          const remoteMap = new Map(parsedData.map((r: ProcurementRequest) => [r.id, r]));
-          const merged = [...parsedData];
-          
-          // Check for any requests currently in local cache that are NOT yet on the backend
-          const localOnlyRequests: ProcurementRequest[] = [];
-          prev.forEach(localReq => {
-            if (!remoteMap.has(localReq.id)) {
-              merged.push(localReq);
-              localOnlyRequests.push(localReq);
-            }
-          });
+        updateLocalAndRef(merged);
 
-          // Automatically push any local-only requests to Supabase backend so they are NEVER trapped in local storage!
-          if (localOnlyRequests.length > 0) {
-            console.log(`Syncing ${localOnlyRequests.length} locally cached requests to Supabase backend...`);
-            const payloads = localOnlyRequests.map(sanitizePayloadForSupabase);
-            (async () => {
-              try {
-                const { error: syncErr } = await supabase.from('procurement_requests').upsert(payloads, { onConflict: 'id' });
-                if (syncErr) {
-                  console.warn('Failed to sync local-only requests to backend:', syncErr.message);
-                } else {
-                  console.log(`Successfully synced ${localOnlyRequests.length} requests to backend.`);
-                }
-              } catch (err) {
-                console.warn('Sync error:', err);
-              }
-            })();
+        if (localToSync.length > 0) {
+          console.log(`Syncing ${localToSync.length} newer local requests to Supabase backend...`);
+          const payloads = localToSync.map(sanitizePayloadForSupabase);
+          try {
+            await supabase.from('procurement_requests').upsert(payloads, { onConflict: 'id' });
+          } catch (err) {
+            console.warn('Sync error:', err);
           }
-
-          persistToStorage(REQ_CACHE_KEY, merged);
-          return merged;
-        });
+        }
       }
     } catch (err: any) {
       console.warn('Error fetching procurement requests:', err?.message || err);
@@ -350,7 +367,7 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const { addNotification } = useNotifications();
 
   const addRequest = async (requestData: Omit<ProcurementRequest, 'id' | 'createdAt' | 'status'>) => {
-    const id = generateUniqueRequestId(requests);
+    const id = generateUniqueRequestId(requestsRef.current);
     const newRequest: ProcurementRequest = {
       ...requestData,
       id,
@@ -369,11 +386,8 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     // 2. Update local state and localStorage cache
-    setRequests(prev => {
-      const updated = [newRequest, ...prev.filter(r => r.id !== newRequest.id)];
-      persistToStorage(REQ_CACHE_KEY, updated);
-      return updated;
-    });
+    const updated = [newRequest, ...requestsRef.current.filter(r => r.id !== newRequest.id)];
+    updateLocalAndRef(updated);
 
     return newRequest.id;
   };
@@ -381,7 +395,7 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const saveDraft = async (requestData: Omit<ProcurementRequest, 'id' | 'createdAt' | 'status'>, existingId?: string) => {
     try {
       if (existingId) {
-        const existingReq = requests.find(r => r.id === existingId);
+        const existingReq = requestsRef.current.find(r => r.id === existingId);
         const updatedReq: ProcurementRequest = {
           ...(existingReq || ({} as ProcurementRequest)),
           ...requestData,
@@ -395,13 +409,10 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
           console.error('Supabase update draft error:', error);
           throw new Error(`Failed to save draft to backend: ${error.message}`);
         }
-        setRequests(prev => {
-          const updated = prev.map(req => req.id === existingId ? updatedReq : req);
-          persistToStorage(REQ_CACHE_KEY, updated);
-          return updated;
-        });
+        const updated = requestsRef.current.map(req => req.id === existingId ? updatedReq : req);
+        updateLocalAndRef(updated);
       } else {
-        const id = generateUniqueRequestId(requests);
+        const id = generateUniqueRequestId(requestsRef.current);
         const newRequest: ProcurementRequest = {
           ...requestData,
           id,
@@ -416,11 +427,8 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
           console.error('Supabase insert draft error:', error);
           throw new Error(`Failed to save draft to backend: ${error.message}`);
         }
-        setRequests(prev => {
-          const updated = [newRequest, ...prev.filter(r => r.id !== newRequest.id)];
-          persistToStorage(REQ_CACHE_KEY, updated);
-          return updated;
-        });
+        const updated = [newRequest, ...requestsRef.current.filter(r => r.id !== newRequest.id)];
+        updateLocalAndRef(updated);
       }
     } catch (error) {
       console.error('Error saving draft:', error);
@@ -430,10 +438,14 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const updateRequest = async (id: string, updates: Partial<ProcurementRequest>) => {
     try {
-      const existingReq = requests.find(r => r.id === id);
+      const existingReq = requestsRef.current.find(r => r.id === id);
       const mergedReq: ProcurementRequest = existingReq
         ? { ...existingReq, ...updates }
         : ({ id, ...updates } as ProcurementRequest);
+
+      // Immediately update local state & ref so subsequent calls in same event tick see it
+      const updatedList = requestsRef.current.map(req => req.id === id ? mergedReq : req);
+      updateLocalAndRef(updatedList);
 
       const payload = sanitizePayloadForSupabase(mergedReq);
       if (Object.keys(payload).length > 0) {
@@ -443,12 +455,6 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
           throw new Error(`Failed to update backend: ${error.message}`);
         }
       }
-
-      setRequests(prev => {
-        const updated = prev.map(req => req.id === id ? mergedReq : req);
-        persistToStorage(REQ_CACHE_KEY, updated);
-        return updated;
-      });
     } catch (error) {
       console.error('Error updating request:', error);
       throw error;
@@ -457,7 +463,7 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const voidApprover = async (id: string, approverId: string, reason: string) => {
     try {
-      const targetReq = requests.find(r => r.id === id);
+      const targetReq = requestsRef.current.find(r => r.id === id);
       if (!targetReq) return;
 
       let updatedReq: ProcurementRequest = { ...targetReq };
@@ -478,18 +484,15 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         };
       }
 
+      const updatedList = requestsRef.current.map(req => req.id === id ? updatedReq : req);
+      updateLocalAndRef(updatedList);
+
       const payload = sanitizePayloadForSupabase(updatedReq);
       const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
       if (error) {
         console.error('Supabase voidApprover error:', error);
         throw new Error(`Failed to void approver on backend: ${error.message}`);
       }
-
-      setRequests(prev => {
-        const updated = prev.map(req => req.id === id ? updatedReq : req);
-        persistToStorage(REQ_CACHE_KEY, updated);
-        return updated;
-      });
     } catch (error: any) {
       console.error('voidApprover error:', error);
       throw error;
@@ -499,7 +502,7 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const processApproval = async (id: string, approverId: string, status: 'Approved' | 'Rejected' | 'Sent Back', signature: string, notes?: string, updatedItems?: ProcurementItem[]) => {
     try {
       console.log('processApproval called for request:', id, 'status:', status);
-      const req = requests.find(r => r.id === id);
+      const req = requestsRef.current.find(r => r.id === id);
       if (!req) {
         console.error('Request not found for ID:', id);
         throw new Error('Request not found');
@@ -650,6 +653,15 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
 
       if (requestToDeleteId && requestsToInsert.length > 0) {
+        const reqIndex = requestsRef.current.findIndex(r => r.id === id);
+        const newRequests = [...requestsRef.current];
+        if (reqIndex !== -1) {
+          newRequests.splice(reqIndex, 1, ...requestsToInsert);
+        } else {
+          newRequests.push(...requestsToInsert);
+        }
+        updateLocalAndRef(newRequests);
+
         await supabase.from('procurement_requests').delete().eq('id', id);
         const sanitizedSplit = requestsToInsert.map(sanitizePayloadForSupabase);
         const { error: insErr } = await supabase.from('procurement_requests').upsert(sanitizedSplit, { onConflict: 'id' });
@@ -657,31 +669,16 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
           console.error('Supabase split insert error on backend:', insErr);
           throw new Error(`Failed to save split requests: ${insErr.message}`);
         }
-
-        setRequests(prev => {
-          const reqIndex = prev.findIndex(r => r.id === id);
-          const newRequests = [...prev];
-          if (reqIndex !== -1) {
-            newRequests.splice(reqIndex, 1, ...requestsToInsert);
-          } else {
-            newRequests.push(...requestsToInsert);
-          }
-          persistToStorage(REQ_CACHE_KEY, newRequests);
-          return newRequests;
-        });
       } else if (requestToUpdate) {
+        const updated = requestsRef.current.map(r => r.id === id ? requestToUpdate! : r);
+        updateLocalAndRef(updated);
+
         const payload = sanitizePayloadForSupabase(requestToUpdate);
         const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
         if (error) {
           console.error('Supabase backend upsert error in processApproval:', error);
           throw new Error(`Failed to save approval to backend: ${error.message}`);
         }
-
-        setRequests(prev => {
-          const updated = prev.map(r => r.id === id ? requestToUpdate! : r);
-          persistToStorage(REQ_CACHE_KEY, updated);
-          return updated;
-        });
       }
     } catch (error: any) {
       console.error('processApproval error:', error);
@@ -691,7 +688,7 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const updateRequestStatus = async (id: string, status: RequestStatus | 'Draft', notes?: string, role?: 'Audit' | 'Accounts', signature?: string) => {
     try {
-      const req = requests.find(r => r.id === id);
+      const req = requestsRef.current.find(r => r.id === id);
       if (!req) return;
 
       if (status === 'Pending Accounts') {
@@ -756,18 +753,15 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
       }
 
+      const updatedList = requestsRef.current.map(r => r.id === id ? updatedReq : r);
+      updateLocalAndRef(updatedList);
+
       const payload = sanitizePayloadForSupabase(updatedReq);
       const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
       if (error) {
         console.error('Supabase backend updateRequestStatus error:', error);
         throw new Error(`Failed to update request status on backend: ${error.message}`);
       }
-
-      setRequests(prev => {
-        const updated = prev.map(r => r.id === id ? updatedReq : r);
-        persistToStorage(REQ_CACHE_KEY, updated);
-        return updated;
-      });
     } catch (error: any) {
       console.error('updateRequestStatus error:', error);
       throw error;
@@ -821,7 +815,7 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const markAsPaid = async (id: string, invoice?: Attachment) => {
     try {
-      const req = requests.find(r => r.id === id);
+      const req = requestsRef.current.find(r => r.id === id);
       if (!req) return;
 
       const updatedReq: ProcurementRequest = {
@@ -831,18 +825,15 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         paymentInvoice: invoice || req.paymentInvoice
       };
 
+      const updatedList = requestsRef.current.map(r => r.id === id ? updatedReq : r);
+      updateLocalAndRef(updatedList);
+
       const payload = sanitizePayloadForSupabase(updatedReq);
       const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
       if (error) {
         console.error('Supabase backend markAsPaid error:', error);
         throw new Error(`Failed to save payment status on backend: ${error.message}`);
       }
-
-      setRequests(prev => {
-        const updated = prev.map(r => r.id === id ? updatedReq : r);
-        persistToStorage(REQ_CACHE_KEY, updated);
-        return updated;
-      });
     } catch (error: any) {
       console.error('markAsPaid error:', error);
       throw error;
@@ -851,7 +842,7 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const requestAccountNumber = async (id: string) => {
     try {
-      const req = requests.find(r => r.id === id);
+      const req = requestsRef.current.find(r => r.id === id);
       if (!req) return;
 
       const updatedReq: ProcurementRequest = {
@@ -859,18 +850,15 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         accountNumberRequested: true
       };
 
+      const updatedList = requestsRef.current.map(r => r.id === id ? updatedReq : r);
+      updateLocalAndRef(updatedList);
+
       const payload = sanitizePayloadForSupabase(updatedReq);
       const { error } = await supabase.from('procurement_requests').upsert(payload, { onConflict: 'id' });
       if (error) {
         console.error('Supabase backend requestAccountNumber error:', error);
         throw new Error(`Failed to request account number on backend: ${error.message}`);
       }
-
-      setRequests(prev => {
-        const updated = prev.map(r => r.id === id ? updatedReq : r);
-        persistToStorage(REQ_CACHE_KEY, updated);
-        return updated;
-      });
     } catch (error: any) {
       console.error('requestAccountNumber error:', error);
       throw error;
